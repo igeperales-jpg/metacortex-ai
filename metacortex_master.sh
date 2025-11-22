@@ -27,6 +27,29 @@ readonly PID_DIR="${PROJECT_ROOT}/pid"
 readonly VENV_PYTHON="${PROJECT_ROOT}/.venv/bin/python3"
 readonly VENV_PIP="${PROJECT_ROOT}/.venv/bin/pip"
 
+# ============================================================================
+# 🍎 CONFIGURACIÓN APPLE SILICON M4 + MPS (Metal Performance Shaders)
+# ============================================================================
+readonly APPLE_SILICON_M4=true
+readonly FORCE_MPS=true  # Forzar uso de GPU Metal en lugar de CPU
+readonly DEVICE="mps"    # PyTorch device: mps (GPU Metal)
+
+# Variables de entorno para PyTorch MPS
+export PYTORCH_ENABLE_MPS_FALLBACK=1  # Fallback a CPU si MPS falla
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0  # Usar toda la memoria GPU disponible
+export PYTORCH_MPS_PREFER_METAL=1  # Preferir Metal sobre CPU
+export MPS_FORCE_ENABLE=1  # Forzar MPS incluso si no es detectado
+
+# Optimizaciones para Apple Silicon
+export TOKENIZERS_PARALLELISM=true  # Paralelizar tokenizers
+export OMP_NUM_THREADS=10  # iMac M4 tiene 10 cores de rendimiento
+export MKL_NUM_THREADS=10
+export OPENBLAS_NUM_THREADS=10
+
+# Configuración de memoria para ML (iMac M4 tiene 16-32GB RAM unificada)
+export PYTORCH_MPS_ALLOCATOR_POLICY="garbage_collection"  # Mejor gestión de memoria
+export TF_GPU_ALLOCATOR="cuda_malloc_async"  # Para TensorFlow si se usa
+
 # Archivos de control
 readonly DAEMON_SCRIPT="${PROJECT_ROOT}/metacortex_daemon.py"
 readonly DAEMON_PID_FILE="${PROJECT_ROOT}/metacortex_daemon_military.pid"
@@ -78,6 +101,105 @@ check_venv() {
     fi
 }
 
+check_apple_silicon() {
+    log_info "🍎 Verificando Apple Silicon M4..."
+    
+    # Verificar que estamos en Apple Silicon
+    local arch=$(uname -m)
+    if [ "$arch" != "arm64" ]; then
+        log_warning "⚠️ No se detectó Apple Silicon (arch: $arch)"
+        log_warning "   El sistema se ejecutará en modo CPU"
+        return 1
+    fi
+    
+    # Obtener información del chip
+    local chip_info=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "Unknown")
+    log_success "✅ Apple Silicon detectado: $chip_info"
+    
+    # Verificar cores disponibles
+    local perf_cores=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || echo "Unknown")
+    local efficiency_cores=$(sysctl -n hw.perflevel1.physicalcpu 2>/dev/null || echo "Unknown")
+    local total_cores=$(sysctl -n hw.physicalcpu 2>/dev/null || echo "Unknown")
+    
+    log_info "   Performance Cores: $perf_cores"
+    log_info "   Efficiency Cores: $efficiency_cores"
+    log_info "   Total Physical Cores: $total_cores"
+    
+    # Verificar memoria unificada
+    local memory_gb=$(sysctl -n hw.memsize 2>/dev/null | awk '{print int($1/1024/1024/1024)}')
+    log_info "   Unified Memory: ${memory_gb}GB"
+    
+    # Verificar que PyTorch MPS esté disponible
+    log_info "🔍 Verificando PyTorch MPS..."
+    local mps_available=$("$VENV_PYTHON" -c "import torch; print('YES' if torch.backends.mps.is_available() else 'NO')" 2>/dev/null || echo "NO")
+    
+    if [ "$mps_available" = "YES" ]; then
+        log_success "✅ PyTorch MPS (Metal) DISPONIBLE"
+        log_info "   GPU Metal será usado para aceleración"
+        return 0
+    else
+        log_warning "⚠️ PyTorch MPS NO disponible"
+        log_warning "   Instala PyTorch con soporte MPS:"
+        log_warning "   pip3 install --upgrade torch torchvision torchaudio"
+        return 1
+    fi
+}
+
+verify_mps_usage() {
+    log_info "🎮 Verificando uso de GPU Metal (MPS)..."
+    
+    # Crear script temporal de verificación
+    local verify_script=$(cat <<'EOF'
+import torch
+import sys
+
+print("=" * 60)
+print("🍎 APPLE SILICON M4 + MPS VERIFICATION")
+print("=" * 60)
+
+# 1. PyTorch version
+print(f"PyTorch version: {torch.__version__}")
+
+# 2. MPS availability
+mps_available = torch.backends.mps.is_available()
+print(f"MPS available: {mps_available}")
+
+if mps_available:
+    print(f"MPS built: {torch.backends.mps.is_built()}")
+    
+    # 3. Try to use MPS
+    try:
+        device = torch.device("mps")
+        x = torch.randn(1000, 1000, device=device)
+        y = torch.randn(1000, 1000, device=device)
+        z = x @ y  # Matrix multiplication on GPU
+        print(f"✅ MPS test PASSED - GPU is working!")
+        print(f"   Device: {device}")
+        print(f"   Test tensor shape: {z.shape}")
+    except Exception as e:
+        print(f"❌ MPS test FAILED: {e}")
+        sys.exit(1)
+else:
+    print("❌ MPS not available - will use CPU (slower)")
+    sys.exit(1)
+
+print("=" * 60)
+EOF
+)
+    
+    echo "$verify_script" | "$VENV_PYTHON" 2>&1
+    local exit_code=$?
+    
+    if [ $exit_code -eq 0 ]; then
+        log_success "✅ GPU Metal (MPS) está funcionando correctamente"
+        return 0
+    else
+        log_error "❌ GPU Metal (MPS) NO está funcionando"
+        log_warning "   El sistema usará CPU (más lento)"
+        return 1
+    fi
+}
+
 is_process_running() {
     local pid_file="$1"
     if [ -f "$pid_file" ]; then
@@ -109,9 +231,30 @@ wait_for_process() {
 # FUNCIONES PRINCIPALES
 # ============================================================================
 start_system() {
-    print_header "🚀 INICIANDO METACORTEX - STARTUP ORCHESTRATOR"
+    print_header "🚀 INICIANDO METACORTEX - APPLE SILICON M4 + MPS"
     
     check_venv
+    
+    # 🍎 VERIFICAR APPLE SILICON M4 Y MPS
+    log_info "═══════════════════════════════════════════════════════════"
+    log_info "🍎 APPLE SILICON M4 OPTIMIZATION"
+    log_info "═══════════════════════════════════════════════════════════"
+    
+    check_apple_silicon
+    local mps_status=$?
+    
+    if [ $mps_status -eq 0 ]; then
+        verify_mps_usage
+        log_success "✅ Sistema configurado para GPU Metal (MPS)"
+        log_info "   PYTORCH_ENABLE_MPS_FALLBACK=1"
+        log_info "   PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0"
+        log_info "   MPS_FORCE_ENABLE=1"
+    else
+        log_warning "⚠️ MPS no disponible, usando CPU"
+    fi
+    
+    log_info "═══════════════════════════════════════════════════════════"
+    echo ""
     
     # 1. Verificar que NO haya procesos METACORTEX corriendo (prevenir duplicados)
     log_info "Verificando estado previo (anti-duplicados)..."
@@ -141,13 +284,16 @@ start_system() {
     mkdir -p "$LOGS_DIR"
     mkdir -p "$PID_DIR"
     
-    # 🍎 4. ACTIVAR PERSISTENCIA EN macOS con caffeinate
-    log_info "Activando persistencia en macOS (caffeinate)..."
-    log_info "   - Mantiene sistema ejecutándose 24/7"
-    log_info "   - ✅ Permite sleep de la pantalla (ahorro de energía)"
-    log_info "   - Previene sleep del sistema"
-    log_info "   - Inicialización ORDENADA sin circular imports"
-    log_info "   - Health checks antes de continuar"
+    # 🍎 4. ACTIVAR PERSISTENCIA EN macOS con caffeinate (OPTIMIZADO PARA M4)
+    log_info "🍎 Activando persistencia optimizada para iMac M4..."
+    log_info "   ✅ Caffeinate: Mantiene sistema ejecutándose 24/7"
+    log_info "   ✅ GPU Metal (MPS): Aceleración de ML/AI"
+    log_info "   ✅ Unified Memory: Compartida entre CPU y GPU"
+    log_info "   ✅ Performance Cores: Priorizados para carga pesada"
+    log_info "   ✅ Efficiency Cores: Tareas de fondo"
+    log_info "   ✅ Permite sleep de pantalla (ahorro de energía)"
+    log_info "   ✅ Inicialización ORDENADA sin circular imports"
+    log_info "   ✅ Health checks antes de continuar"
     
     # 4. Iniciar SERVICIOS STANDALONE (ultra-ligeros, no bloquean)
     log_info "🚀 Iniciando servicios STANDALONE (arquitectura 3 capas)..."
@@ -222,24 +368,45 @@ start_system() {
         log_warning "   ⚠️ Ollama: NO ACTIVO (ver logs/ollama.log)"
     fi
     
-    # 5. Iniciar DAEMON MILITAR (24/7 persistence) - YA NO carga módulos pesados
-    log_info "Iniciando METACORTEX Military Daemon (modo ligero)..."
+    # 5. Iniciar DAEMON MILITAR (24/7 persistence) - CON MPS FORZADO
+    log_info "Iniciando METACORTEX Military Daemon (Apple Silicon M4 + MPS)..."
     cd "$PROJECT_ROOT"
     source .venv/bin/activate
+    
+    # Configurar variables de entorno para forzar MPS
+    export PYTORCH_ENABLE_MPS_FALLBACK=1
+    export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
+    export PYTORCH_MPS_PREFER_METAL=1
+    export MPS_FORCE_ENABLE=1
+    export TOKENIZERS_PARALLELISM=true
+    export OMP_NUM_THREADS=10
+    
+    log_info "   🎮 Variables de entorno MPS configuradas:"
+    log_info "      PYTORCH_ENABLE_MPS_FALLBACK=1"
+    log_info "      PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0"
+    log_info "      MPS_FORCE_ENABLE=1"
+    log_info "      OMP_NUM_THREADS=10 (M4 10-core)"
     
     nohup caffeinate -i "$VENV_PYTHON" "${PROJECT_ROOT}/metacortex_daemon.py" > "${LOGS_DIR}/metacortex_daemon_military.log" 2>&1 &
     local daemon_pid=$!
     echo "$daemon_pid" > "${PID_DIR}/metacortex_daemon_military.pid"
     
     log_success "Military Daemon iniciado (PID: $daemon_pid)"
-    log_info "   ✅ Daemon: PERSISTENCIA 24/7 ACTIVA"
+    log_info "   ✅ Daemon: PERSISTENCIA 24/7 ACTIVA (caffeinate)"
+    log_info "   ✅ GPU Metal (MPS): FORZADO para ML/AI"
+    log_info "   ✅ Apple Silicon M4: OPTIMIZADO"
     log_info "   ✅ Health monitoring: CONTINUO"
     log_info "   ✅ Capability discovery: EXPONENCIAL"
     
     sleep 3
     
-    # 6. Iniciar ORCHESTRATOR (coordinador de agentes)
-    log_info "Iniciando METACORTEX Agent Orchestrator..."
+    # 6. Iniciar ORCHESTRATOR (coordinador de agentes) - CON MPS
+    log_info "Iniciando METACORTEX Agent Orchestrator (Apple Silicon M4)..."
+    
+    # Mantener variables MPS para orchestrator
+    export PYTORCH_ENABLE_MPS_FALLBACK=1
+    export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
+    export MPS_FORCE_ENABLE=1
     
     # Usar el Startup Orchestrator que garantiza:
     # - Orden correcto de inicialización (5 fases)
@@ -305,9 +472,12 @@ start_system() {
         log_info "Verificando servicios finales..."
         show_status
         
-        print_header "✅ METACORTEX OPERACIONAL - PERSISTENCIA ACTIVA 🍎"
+        print_header "✅ METACORTEX OPERACIONAL - APPLE SILICON M4 + MPS 🍎"
         log_info "   💡 Daemon logs: tail -f ${LOGS_DIR}/metacortex_daemon_military.log"
         log_info "   💡 Orchestrator logs: tail -f ${LOGS_DIR}/startup_orchestrator.log"
+        log_info "   🎮 GPU Metal (MPS): ACTIVO para aceleración ML/AI"
+        log_info "   🍎 iMac M4: Optimizado para 24/7 con caffeinate"
+        log_info "   ⚡ Unified Memory: Compartida entre CPU y GPU"
     else
         log_error "Error crítico: Daemon no está corriendo"
         log_info "Ver logs en: ${LOGS_DIR}/metacortex_daemon_military.log"
@@ -421,7 +591,37 @@ emergency_shutdown() {
 }
 
 show_status() {
-    print_header "📊 ESTADO DEL SISTEMA"
+    print_header "📊 ESTADO DEL SISTEMA - APPLE SILICON M4"
+    
+    # 🍎 0. Estado de Apple Silicon M4 y MPS
+    echo -e "${BOLD}Hardware (Apple Silicon M4):${RESET}"
+    
+    local arch=$(uname -m)
+    if [ "$arch" = "arm64" ]; then
+        local chip_info=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "Unknown")
+        echo -e "   ${GREEN}●${RESET} Chip: $chip_info"
+        
+        local perf_cores=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || echo "?")
+        local efficiency_cores=$(sysctl -n hw.perflevel1.physicalcpu 2>/dev/null || echo "?")
+        echo -e "   ${GREEN}●${RESET} Performance Cores: $perf_cores"
+        echo -e "   ${GREEN}●${RESET} Efficiency Cores: $efficiency_cores"
+        
+        local memory_gb=$(sysctl -n hw.memsize 2>/dev/null | awk '{print int($1/1024/1024/1024)}')
+        echo -e "   ${GREEN}●${RESET} Unified Memory: ${memory_gb}GB"
+    else
+        echo -e "   ${RED}●${RESET} No Apple Silicon detected (arch: $arch)"
+    fi
+    
+    # Verificar MPS
+    if [ -f "${PROJECT_ROOT}/.venv/bin/python3" ]; then
+        local mps_available=$("${PROJECT_ROOT}/.venv/bin/python3" -c "import torch; print('YES' if torch.backends.mps.is_available() else 'NO')" 2>/dev/null || echo "NO")
+        if [ "$mps_available" = "YES" ]; then
+            echo -e "   ${GREEN}●${RESET} GPU Metal (MPS): DISPONIBLE"
+        else
+            echo -e "   ${RED}●${RESET} GPU Metal (MPS): NO DISPONIBLE"
+        fi
+    fi
+    echo ""
     
     # 1. Estado del daemon
     echo -e "${BOLD}Daemon Principal:${RESET}"

@@ -1,0 +1,36 @@
+{
+  "communication": {
+    "signal_enabled": true,
+    "tor_enabled": true,
+    "matrix_enabled": true
+  },
+  "financial": {
+    "bitcoin_enabled": true,
+    "lightning_enabled": true,
+    "monero_enabled": true,
+    "emergency_fund_target": 100000
+  },
+  "intelligence": {
+    "news_api_key": "",
+    "monitored_regions": [
+      "middle_east",
+      "north_africa",
+      "south_asia",
+      "china"
+    ],
+    "alert_keywords": [
+      "persecution",
+      "christian",
+      "church attack",
+      "religious freedom"
+    ]
+  },
+  "safe_houses": {
+    "partner_organizations": [
+      "Open Doors",
+      "Voice of the Martyrs",
+      "International Christian Concern",
+      "Barnabas Fund"
+    ]
+  }
+}
