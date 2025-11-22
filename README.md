@@ -1,5 +1,10 @@
 # 🧠 METACORTEX - Sistema de IA Autónomo Evolutivo
 
+[![Status](https://img.shields.io/badge/Status-OPERACIONAL-success?style=for-the-badge)](https://github.com/igeperales-jpg/metacortex-ai)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-M4-blue?style=for-the-badge&logo=apple)](https://github.com/igeperales-jpg/metacortex-ai)
+[![GPU](https://img.shields.io/badge/GPU-Metal%20MPS-orange?style=for-the-badge)](https://github.com/igeperales-jpg/metacortex-ai)
+[![Python](https://img.shields.io/badge/Python-3.13-yellow?style=for-the-badge&logo=python)](https://github.com/igeperales-jpg/metacortex-ai)
+
 ## 🎯 Visión General
 
 METACORTEX es un sistema avanzado de Inteligencia Artificial Autónoma con capacidades de:
@@ -10,6 +15,8 @@ METACORTEX es un sistema avanzado de Inteligencia Artificial Autónoma con capac
 - 📡 **Telemetría Militar**: Monitoreo en tiempo real con Prometheus
 - 🔗 **Red Neuronal Simbiótica**: Comunicación inter-modular
 - 🛡️ **Resiliencia**: Circuit breakers, health checks, failover automático
+- 🍎 **Optimizado para Apple Silicon M4**: GPU Metal (MPS) para aceleración ML/AI
+- 🔄 **Persistencia 24/7**: Operación continua y autónoma
 
 ## 📁 Arquitectura del Proyecto
 

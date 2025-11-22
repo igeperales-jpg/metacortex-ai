@@ -777,12 +777,43 @@ class MetacortexMilitaryDaemon:
         python_cmd = str(venv_python) if venv_python.exists() else sys.executable
 
         # Web Interface (puerto 8000) - incluye dashboard en /api/dashboard/metrics
-        self.start_component_with_circuit_breaker(
-            "web_server",
-            [python_cmd, "web_interface/server.py"],
-            cwd=DAEMON_ROOT,
-            priority=PriorityLevel.HIGH,
-        )
+        web_server_file = DAEMON_ROOT / "web_interface" / "server.py"
+        if web_server_file.exists():
+            self.start_component_with_circuit_breaker(
+                "web_server",
+                [python_cmd, str(web_server_file)],
+                cwd=DAEMON_ROOT,
+                priority=PriorityLevel.HIGH,
+            )
+            logger.info("✅ Web Interface service iniciado (puerto 8000)")
+        else:
+            logger.warning(f"⚠️ Web Interface no encontrado: {web_server_file}")
+
+        # Neural Network Service (puerto 8001)
+        neural_service_file = DAEMON_ROOT / "neural_network_service" / "server.py"
+        if neural_service_file.exists():
+            self.start_component_with_circuit_breaker(
+                "neural_network_service",
+                [python_cmd, str(neural_service_file)],
+                cwd=DAEMON_ROOT,
+                priority=PriorityLevel.HIGH,
+            )
+            logger.info("✅ Neural Network Service iniciado (puerto 8001)")
+        else:
+            logger.warning(f"⚠️ Neural Network Service no encontrado: {neural_service_file}")
+
+        # Telemetry Service (puerto 9090)
+        telemetry_service_file = DAEMON_ROOT / "telemetry_service" / "server.py"
+        if telemetry_service_file.exists():
+            self.start_component_with_circuit_breaker(
+                "telemetry_service",
+                [python_cmd, str(telemetry_service_file)],
+                cwd=DAEMON_ROOT,
+                priority=PriorityLevel.MEDIUM,
+            )
+            logger.info("✅ Telemetry Service iniciado (puerto 9090)")
+        else:
+            logger.warning(f"⚠️ Telemetry Service no encontrado: {telemetry_service_file}")
 
         # Metacortex Orchestrator
         self.start_component_with_circuit_breaker(
@@ -791,16 +822,6 @@ class MetacortexMilitaryDaemon:
             cwd=DAEMON_ROOT,
             priority=PriorityLevel.CRITICAL,
         )
-
-        # Neural Network
-        neural_file = DAEMON_ROOT / "neural_symbiotic_network.py"
-        if neural_file.exists():
-            self.start_component_with_circuit_breaker(
-                "neural_network",
-                [python_cmd, "neural_symbiotic_network.py", "--daemon"],
-                cwd=DAEMON_ROOT,
-                priority=PriorityLevel.CRITICAL,
-            )
 
         logger.info(f"✅ {len(self.components)} componentes iniciados")
 

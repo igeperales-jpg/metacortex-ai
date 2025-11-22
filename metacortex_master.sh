@@ -302,21 +302,21 @@ start_system() {
     
     # Web Interface STANDALONE (puerto 8000) - Ultra-ligero, lazy loading
     log_info "   → Web Interface STANDALONE (puerto 8000) - <3s startup..."
-    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/start_web_interface_standalone.py" > "${LOGS_DIR}/web_interface_stdout.log" 2>&1 &
+    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/web_interface/server.py" > "${LOGS_DIR}/web_interface_stdout.log" 2>&1 &
     local web_interface_pid=$!
     echo "$web_interface_pid" > "${PID_DIR}/web_interface.pid"
     log_success "      Web Interface STANDALONE iniciado (PID: $web_interface_pid)"
     
     # Neural Network STANDALONE - Sin conexiones simbióticas automáticas
     log_info "   → Neural Network STANDALONE - <5s startup..."
-    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/start_neural_network_standalone.py" > "${LOGS_DIR}/neural_network_stdout.log" 2>&1 &
+    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/neural_network_service/server.py" > "${LOGS_DIR}/neural_network_stdout.log" 2>&1 &
     local neural_network_pid=$!
     echo "$neural_network_pid" > "${PID_DIR}/neural_network.pid"
     log_success "      Neural Network STANDALONE iniciado (PID: $neural_network_pid)"
     
     # Telemetry STANDALONE (puerto 9090) - Prometheus metrics SIMPLE
     log_info "   → Telemetry System STANDALONE (puerto 9090) - ULTRA-SIMPLE..."
-    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/start_telemetry_simple.py" > "${LOGS_DIR}/telemetry_stdout.log" 2>&1 &
+    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/telemetry_service/server.py" > "${LOGS_DIR}/telemetry_stdout.log" 2>&1 &
     local telemetry_pid=$!
     echo "$telemetry_pid" > "${PID_DIR}/telemetry.pid"
     log_success "      Telemetry System STANDALONE iniciado (PID: $telemetry_pid)"
@@ -496,8 +496,9 @@ stop_system() {
     log_info "Matando procesos específicos de METACORTEX..."
     pkill -9 -f "python.*metacortex_daemon.py" 2>/dev/null || true
     pkill -9 -f "python.*metacortex_startup_orchestrator.py" 2>/dev/null || true
-    pkill -9 -f "python.*start_neural_network_standalone.py" 2>/dev/null || true
-    pkill -9 -f "python.*start_web_interface_standalone.py" 2>/dev/null || true
+    pkill -9 -f "python.*neural_network_service/server.py" 2>/dev/null || true
+    pkill -9 -f "python.*web_interface/server.py" 2>/dev/null || true
+    pkill -9 -f "python.*telemetry_service/server.py" 2>/dev/null || true
     pkill -9 -f "python.*start_telemetry_simple.py" 2>/dev/null || true
     pkill -9 -f "python.*start_neural_network.py" 2>/dev/null || true
     pkill -9 -f "python.*start_web_interface.py" 2>/dev/null || true
