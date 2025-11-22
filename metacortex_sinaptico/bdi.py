@@ -1777,7 +1777,11 @@ class BDISystem:
     
     # ═══════════════════════════════════════════════════════════════════════
     # MÉTODOS AVANZADOS 2026: Razonamiento Híbrido + Ética
-    # ═════════════════
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    async def select_intention_with_hybrid_reasoning(
+        self,
+        current_state: Dict[str, Any],
         urgency: float = 0.5,
         complexity: float = 0.5
     ) -> Optional[Intention]:
@@ -1876,7 +1880,7 @@ class BDISystem:
         
         return combined_score
     
-    def _create_intention_from_desire(
+    async def _create_intention_from_desire(
         self,
         desire: Desire,
         context: Dict[str, Any]
@@ -1913,7 +1917,7 @@ class BDISystem:
         
         return intention
     
-    def learn_from_intention_outcome(
+    async def learn_from_intention_outcome(
         self,
         intention: Intention,
         success: bool,
