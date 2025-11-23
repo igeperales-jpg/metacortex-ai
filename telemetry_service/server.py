@@ -116,9 +116,10 @@ class TelemetryServiceState:
     def _initialize_telemetry(self):
         """Inicializa sistema de telemetría"""
         try:
-            self.telemetry = get_telemetry_system(port=9090)
+            # Puerto 9091 para Prometheus metrics (9090 es para el Web Interface)
+            self.telemetry = get_telemetry_system(port=9091)
             if self.telemetry:
-                logger.info("✅ Telemetry System inicializado")
+                logger.info("✅ Telemetry System inicializado (puerto 9091)")
                 # Iniciar servidor de métricas Prometheus
                 self.telemetry.start_server()
             else:
@@ -382,9 +383,9 @@ async def startup_event():
     logger.info(f"📊 Telemetry System: {'Connected' if state.telemetry else 'Not Available'}")
     logger.info("=" * 80)
     logger.info("✅ Telemetry Service READY")
-    logger.info(f"📍 Prometheus Metrics: http://localhost:9090/metrics")
-    logger.info(f"📍 API Docs: http://localhost:9090/docs")
-    logger.info(f"📍 Dashboard: http://localhost:9090/dashboard")
+    logger.info("📍 Prometheus Metrics: http://localhost:9092/metrics")
+    logger.info("📍 API Docs: http://localhost:9092/docs")
+    logger.info("📍 Dashboard: http://localhost:9092/dashboard")
     logger.info("=" * 80)
 
 
@@ -403,8 +404,8 @@ async def shutdown_event():
 def main():
     """Punto de entrada principal"""
     try:
-        # Configurar puerto
-        port = int(os.environ.get("TELEMETRY_SERVICE_PORT", "9090"))
+        # Configurar puerto (9092 para evitar conflicto con Web Interface:9090)
+        port = int(os.environ.get("TELEMETRY_SERVICE_PORT", "9092"))
         host = os.environ.get("TELEMETRY_SERVICE_HOST", "0.0.0.0")
         
         logger.info(f"🚀 Iniciando servidor en {host}:{port}")

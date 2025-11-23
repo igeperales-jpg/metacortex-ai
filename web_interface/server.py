@@ -123,10 +123,10 @@ class WebInterfaceState:
                 self.neural_network.register_module("web_interface", self)
                 logger.info("✅ Neural Network conectada")
             
-            # Telemetry
+            # Telemetry (puerto 9090 para evitar conflicto con Web Interface en 8000)
             try:
-                self.telemetry = get_telemetry_system()
-                logger.info("✅ Telemetry System conectado")
+                self.telemetry = get_telemetry_system(port=9090)
+                logger.info("✅ Telemetry System conectado (puerto 9090)")
             except Exception as e:
                 logger.warning(f"⚠️ Telemetry no disponible: {e}")
                 self.telemetry = None
