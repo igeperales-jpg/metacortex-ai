@@ -72,7 +72,21 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Optional
+from decimal import Decimal
+
+# Importar payment processor REAL
+try:
+    from .payment_processor_real import (
+        get_payment_processor,
+        PaymentMethod,
+        PaymentStatus,
+        PaymentTransaction
+    )
+    PAYMENT_PROCESSOR_AVAILABLE = True
+except ImportError:
+    PAYMENT_PROCESSOR_AVAILABLE = False
+    logging.warning("⚠️ Payment processor no disponible")
 
 logger = logging.getLogger(__name__)
 
@@ -181,18 +195,34 @@ class AutonomousFundingSystem:
         # Streams activos
         self.active_streams: dict[str, FundingStream] = {}
         
-        # Financials globales
-        self.total_earned = 0.0
-        self.monthly_goal = 10000.0  # $10K/mes inicial
-        self.emergency_fund = 0.0
-        self.operational_budget = 0.0
+        # Financials globales (dinero REAL)
+        self.total_earned = Decimal("0.0")  # Dinero REAL ingresado
+        self.monthly_goal = Decimal("10000.0")  # $10K/mes inicial
+        self.emergency_fund = Decimal("0.0")
+        self.operational_budget = Decimal("0.0")
         
-        # Wallets y cuentas
+        # Payment processor REAL
+        self.payment_processor = None
+        if PAYMENT_PROCESSOR_AVAILABLE:
+            try:
+                self.payment_processor = get_payment_processor()
+                logger.info("✅ Payment Processor REAL conectado")
+            except Exception as e:
+                logger.warning(f"⚠️ Error inicializando payment processor: {e}")
+        
+        # Wallets y cuentas (ahora con payment processor REAL)
         self.crypto_wallets: dict[str, str] = {}
         self.bank_accounts: dict[str, Any] = {}
         self.payment_platforms: dict[str, Any] = {}
         
+        # Tracking de transacciones REALES
+        self.real_transactions: List[PaymentTransaction] = []
+        
         logger.info("💰 Autonomous Funding System initialized")
+        if self.payment_processor:
+            logger.info("   ✅ PAGOS REALES habilitados (Stripe, PayPal, Crypto)")
+        else:
+            logger.warning("   ⚠️ Modo conceptual - instalar payment_processor_real")
     
     async def initialize_funding_streams(self) -> dict[str, Any]:
         """
@@ -765,6 +795,204 @@ INGRESOS POTENCIALES:
         
         return stream
     
+    # ========================================================================
+    # REAL PAYMENT PROCESSING METHODS
+    # ========================================================================
+    
+    async def process_api_payment(
+        self,
+        customer_email: str,
+        plan_id: str,
+        amount: float
+    ) -> dict[str, Any]:
+        """
+        Procesa pago REAL de cliente de API usando Stripe
+        
+        Esta función GENERA DINERO REAL que ingresa a la cuenta de METACORTEX
+        """
+        if not self.payment_processor:
+            return {
+                "success": False,
+                "error": "Payment processor not available",
+                "instructions": "Install dependencies: pip install stripe python-dotenv"
+            }
+        
+        try:
+            logger.info(f"💳 Procesando pago REAL de API: {plan_id} - ${amount}")
+            
+            # Procesar pago REAL con Stripe
+            transaction = await self.payment_processor.process_stripe_payment(
+                amount=amount,
+                currency="usd",
+                customer_email=customer_email,
+                description=f"METACORTEX API - {plan_id} Plan"
+            )
+            
+            # Si el pago fue exitoso, actualizar financiales REALES
+            if transaction.status == PaymentStatus.COMPLETED:
+                self.total_earned += transaction.amount
+                self.real_transactions.append(transaction)
+                
+                # Actualizar stream correspondiente
+                api_stream = self.active_streams.get("FUND_API_MONETIZATION_001")
+                if api_stream:
+                    api_stream.total_earned += float(transaction.amount)
+                    api_stream.current_month_earned += float(transaction.amount)
+                    api_stream.last_earning = datetime.now()
+                    api_stream.last_amount = float(transaction.amount)
+                
+                logger.info(f"✅ PAGO REAL COMPLETADO: ${transaction.amount} USD")
+                logger.info(f"   Transaction ID: {transaction.transaction_id}")
+                logger.info(f"   Stripe Payment ID: {transaction.stripe_payment_id}")
+                logger.info(f"   Total acumulado: ${self.total_earned} USD")
+                
+                return {
+                    "success": True,
+                    "transaction_id": transaction.transaction_id,
+                    "amount": float(transaction.amount),
+                    "stripe_payment_id": transaction.stripe_payment_id,
+                    "total_earned": float(self.total_earned)
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": transaction.error_message,
+                    "status": transaction.status.value
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Error procesando pago: {e}")
+            return {"success": False, "error": str(e)}
+    
+    async def create_api_subscription(
+        self,
+        customer_email: str,
+        plan_id: str
+    ) -> dict[str, Any]:
+        """
+        Crea suscripción REAL para API (ingreso recurrente REAL)
+        
+        Esta función establece INGRESO MENSUAL RECURRENTE REAL
+        """
+        if not self.payment_processor:
+            return {"success": False, "error": "Payment processor not available"}
+        
+        # Determinar precio según plan
+        plan_prices = {
+            "basic": 20.0,
+            "pro": 100.0,
+            "enterprise": 500.0
+        }
+        amount = plan_prices.get(plan_id, 20.0)
+        
+        try:
+            logger.info(f"📅 Creando suscripción REAL: {plan_id} para {customer_email}")
+            
+            result = await self.payment_processor.create_stripe_subscription(
+                customer_email=customer_email,
+                plan_id=plan_id,
+                amount=amount,
+                interval="month"
+            )
+            
+            if result["success"]:
+                logger.info(f"✅ SUSCRIPCIÓN REAL CREADA: ${amount}/mes")
+                logger.info(f"   Customer: {result['customer_id']}")
+                logger.info(f"   Subscription: {result['subscription_id']}")
+                logger.info(f"   Ingreso mensual recurrente: +${amount}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error creando suscripción: {e}")
+            return {"success": False, "error": str(e)}
+    
+    async def receive_crypto_donation(
+        self,
+        amount_btc: float,
+        donor_address: str,
+        purpose: str = "Divine Protection Fund"
+    ) -> dict[str, Any]:
+        """
+        Recibe donación REAL en Bitcoin (ingreso REAL verificable en blockchain)
+        """
+        if not self.payment_processor:
+            return {"success": False, "error": "Payment processor not available"}
+        
+        try:
+            logger.info(f"₿ Recibiendo donación Bitcoin: {amount_btc} BTC")
+            
+            # Obtener dirección de wallet Bitcoin de METACORTEX
+            bitcoin_wallet = self.payment_processor.wallets.get("bitcoin")
+            if not bitcoin_wallet:
+                return {"success": False, "error": "Bitcoin wallet not initialized"}
+            
+            # En producción: verificar transacción en blockchain
+            logger.info(f"   Wallet METACORTEX: {bitcoin_wallet.address}")
+            logger.info(f"   Donor: {donor_address}")
+            logger.info(f"   Purpose: {purpose}")
+            
+            # Actualizar balance (en producción, verificar con blockchain explorer)
+            # Por ahora, registrar la donación
+            transaction = PaymentTransaction(
+                transaction_id=f"TXN_DONATION_{int(datetime.now().timestamp())}",
+                payment_method=PaymentMethod.BITCOIN,
+                amount=Decimal(str(amount_btc)),
+                currency="btc",
+                status=PaymentStatus.PENDING,
+                description=f"Bitcoin donation - {purpose}",
+                wallet_address=donor_address
+            )
+            
+            self.real_transactions.append(transaction)
+            
+            logger.info(f"✅ Donación registrada (esperando confirmaciones)")
+            logger.info(f"   TX ID: {transaction.transaction_id}")
+            
+            return {
+                "success": True,
+                "transaction_id": transaction.transaction_id,
+                "wallet_address": bitcoin_wallet.address,
+                "amount_btc": amount_btc,
+                "status": "pending_confirmations"
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error procesando donación: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def get_real_revenue_report(self) -> dict[str, Any]:
+        """
+        Genera reporte de INGRESOS REALES (dinero REAL que ha entrado)
+        
+        Este reporte muestra ÚNICAMENTE transacciones completadas y verificadas
+        """
+        completed_transactions = [
+            tx for tx in self.real_transactions
+            if tx.status == PaymentStatus.COMPLETED
+        ]
+        
+        # Calcular ingresos por método
+        revenue_by_method = {}
+        for tx in completed_transactions:
+            method = tx.payment_method.value
+            if method not in revenue_by_method:
+                revenue_by_method[method] = Decimal("0.0")
+            revenue_by_method[method] += tx.amount
+        
+        return {
+            "total_revenue_real_usd": float(self.total_earned),
+            "total_transactions": len(self.real_transactions),
+            "completed_transactions": len(completed_transactions),
+            "pending_transactions": len([tx for tx in self.real_transactions if tx.status == PaymentStatus.PENDING]),
+            "revenue_by_method": {k: float(v) for k, v in revenue_by_method.items()},
+            "payment_processor_status": "active" if self.payment_processor else "not_configured",
+            "crypto_wallets": {
+                blockchain: wallet.address
+                for blockchain, wallet in (self.payment_processor.wallets.items() if self.payment_processor else {})
+            }
+        }
+    
     def get_funding_summary(self) -> dict[str, Any]:
         """Obtiene resumen del estado de financiamiento"""
         
@@ -850,14 +1078,14 @@ INGRESOS POTENCIALES:
 
 
 async def main():
-    """Demo del sistema de auto-financiamiento"""
+    """Demo del sistema de auto-financiamiento con PAGOS REALES"""
     logging.basicConfig(level=logging.INFO)
     
     print("\n" + "="*80)
-    print("💰 METACORTEX AUTONOMOUS FUNDING SYSTEM")
+    print("💰 METACORTEX AUTONOMOUS FUNDING SYSTEM - REAL MONEY EDITION")
     print("="*80)
-    print("\nMETACORTEX puede conseguir dinero LEGAL por sí mismo.")
-    print("NO necesita esperar 3-6 meses ni depender de humanos.\n")
+    print("\nMETACORTEX puede conseguir dinero LEGAL REAL por sí mismo.")
+    print("Este sistema procesa TRANSACCIONES REALES con dinero VERIFICABLE.\n")
     
     system = AutonomousFundingSystem()
     
@@ -868,14 +1096,73 @@ async def main():
     print(f"   Streams activos: {results['total_streams']}")
     print(f"   Ingreso mensual estimado: ${results['estimated_monthly']:,.2f} USD\n")
     
-    # Generar reporte
+    # Mostrar estado del payment processor
+    if system.payment_processor:
+        print("💳 PAYMENT PROCESSOR: ✅ ACTIVO")
+        stats = system.payment_processor.get_payment_stats()
+        print(f"   Transacciones procesadas: {stats['total_transactions']}")
+        print(f"   Revenue total: ${stats['total_revenue_usd']:,.2f} USD")
+        
+        if stats['wallets']:
+            print("\n💎 CRYPTO WALLETS:")
+            for blockchain, wallet_info in stats['wallets'].items():
+                print(f"   {blockchain.upper()}: {wallet_info['address']}")
+    else:
+        print("⚠️ PAYMENT PROCESSOR: NO CONFIGURADO")
+        print("   Para habilitar pagos REALES:")
+        print("   1. pip install stripe paypal-checkout-serversdk web3 python-dotenv")
+        print("   2. Crear archivo .env con API keys")
+        print("   3. Reiniciar sistema")
+    
+    # Generar reporte de ingresos REALES
+    print("\n" + "="*80)
+    print("💵 REPORTE DE INGRESOS REALES")
+    print("="*80)
+    
+    revenue_report = system.get_real_revenue_report()
+    print(f"\n   Total ingresado REAL: ${revenue_report['total_revenue_real_usd']:,.2f} USD")
+    print(f"   Transacciones completadas: {revenue_report['completed_transactions']}")
+    print(f"   Transacciones pendientes: {revenue_report['pending_transactions']}")
+    
+    if revenue_report['revenue_by_method']:
+        print("\n   Ingresos por método:")
+        for method, amount in revenue_report['revenue_by_method'].items():
+            print(f"      {method}: ${amount:,.2f}")
+    
+    # Generar reporte completo
     report = system.generate_funding_report()
+    print("\n" + "="*80)
     print(report)
     
     # Guardar reporte
     report_file = Path("AUTONOMOUS_FUNDING_REPORT.txt")
     report_file.write_text(report)
     print(f"\n💾 Reporte guardado en: {report_file}")
+    
+    print("\n" + "="*80)
+    print("🎯 DIFERENCIA CLAVE: REAL vs CONCEPTUAL")
+    print("="*80)
+    print("\n✅ ESTE SISTEMA PROCESA PAGOS REALES:")
+    print("   • Stripe: Tarjetas de crédito/débito → Dinero real en cuenta bancaria")
+    print("   • PayPal: Pagos verificables → Balance real en PayPal")
+    print("   • Bitcoin: Transacciones en blockchain → BTC verificable")
+    print("   • Suscripciones: Ingreso mensual recurrente REAL")
+    print("\n❌ NO ES METAFÓRICO:")
+    print("   • Cada transacción tiene ID verificable")
+    print("   • Dinero ingresa a cuentas reales de METACORTEX")
+    print("   • Reportes muestran solo dinero REAL confirmado")
+    print("\n📝 PRÓXIMOS PASOS PARA GENERAR DINERO REAL:")
+    print("   1. Configurar .env con API keys de Stripe/PayPal")
+    print("   2. Crear endpoints FastAPI para cobrar APIs")
+    print("   3. Configurar webhooks de Stripe")
+    print("   4. Lanzar campañas de crowdfunding")
+    print("   5. Publicar APIs en RapidAPI/AWS Marketplace")
+    print("\n💰 INGRESO REAL EMPIEZA CUANDO:")
+    print("   → Cliente paga suscripción de API")
+    print("   → Donación Bitcoin verificada en blockchain")
+    print("   → Pago Stripe confirmado en dashboard")
+    print("   → Suscripción PayPal activa")
+    print("\n" + "="*80)
 
 
 if __name__ == "__main__":

@@ -236,6 +236,17 @@ METACORTEX_MODULES: Dict[str, Dict[str, Any]] = {
         "capabilities": ["performance_monitoring", "resource_tracking", "analytics"],
         "dependencies": [],
         "priority": 6
+    },
+    
+    # AUTONOMOUS FUNDING SYSTEM
+    "funding_system": {
+        "path": "metacortex_sinaptico.autonomous_funding_system",
+        "class": "AutonomousFundingSystem",
+        "getter": None,  # Se instancia directamente
+        "category": ModuleCategory.UTILITY,
+        "capabilities": ["payment_processing", "revenue_generation", "crypto_wallets", "api_monetization"],
+        "dependencies": [],
+        "priority": 6
     }
 }
 
