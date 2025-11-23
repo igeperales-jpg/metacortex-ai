@@ -754,9 +754,23 @@ class CognitiveAgent:
             # Seleccionar nueva intención si no hay una activa
             if not self.bdi_system.current_intention:
                 current_state = self._get_current_state_dict()
-                self.bdi_system.current_intention = self.bdi_system.select_intention(
-                    current_state
-                )
+                # 🔥 FIX: Manejar método async select_intention de forma segura
+                intention_result = self.bdi_system.select_intention(current_state)
+                # Si es coroutine, ejecutarla con asyncio
+                if hasattr(intention_result, '__await__'):
+                    import asyncio
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            # Si ya hay un loop corriendo, crear una tarea
+                            self.bdi_system.current_intention = None  # Temporalmente None
+                        else:
+                            self.bdi_system.current_intention = loop.run_until_complete(intention_result)
+                    except RuntimeError:
+                        # No hay loop, crear uno nuevo
+                        self.bdi_system.current_intention = asyncio.run(intention_result)
+                else:
+                    self.bdi_system.current_intention = intention_result
 
             # Añadir deseos evolutivos dinámicos
             if not self.bdi_system.desires:
@@ -984,9 +998,21 @@ class CognitiveAgent:
         # Seleccionar nueva intención si no hay una activa
         if not self.bdi_system.current_intention:
             current_state = self._get_current_state_dict()
-            self.bdi_system.current_intention = self.bdi_system.select_intention(
-                current_state
-            )
+            # 🔥 FIX: Manejar método async select_intention de forma segura
+            intention_result = self.bdi_system.select_intention(current_state)
+            # Si es coroutine, ejecutarla con asyncio
+            if hasattr(intention_result, '__await__'):
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        self.bdi_system.current_intention = None
+                    else:
+                        self.bdi_system.current_intention = loop.run_until_complete(intention_result)
+                except RuntimeError:
+                    self.bdi_system.current_intention = asyncio.run(intention_result)
+            else:
+                self.bdi_system.current_intention = intention_result
 
         # Añadir deseos básicos si no los hay
         if not self.bdi_system.desires:

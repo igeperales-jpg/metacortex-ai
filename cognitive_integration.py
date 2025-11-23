@@ -443,9 +443,13 @@ class CognitiveOrchestrationBridge:
             recent_episodes = self.memory_cognitive.recall_episodes(limit=10)
 
             for episode in recent_episodes:
+                # 🔥 FIX: episode es un MemoryEntry object, no un dict
+                content = getattr(episode, 'content', None) or getattr(episode, 'name', 'cognitive_episode')
+                context = getattr(episode, 'context', {}) or getattr(episode, 'data', {})
+                
                 self.memory_unified.store_episode(
-                    content=episode.get("name", "cognitive_episode"),
-                    context=episode.get("data", {}),
+                    content=str(content),
+                    context=context if isinstance(context, dict) else {},
                     importance=0.7,
                 )
 

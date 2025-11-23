@@ -231,7 +231,7 @@ class MilitaryGradeLLMSelector:
                 return False
                 
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.warning(f"   ⚠️ Ollama no disponible: {e}")
             self.models_health['ollama'] = False
             return False
@@ -250,7 +250,7 @@ class MilitaryGradeLLMSelector:
             self.logger.info(f"   ✅ ML Pipeline disponible con {models_count} modelos")
             return True
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.warning(f"   ⚠️ ML Pipeline no disponible: {e}")
             self.models_health['ml_pipeline'] = False
             return False
@@ -350,7 +350,7 @@ Output ONLY the code, no explanations."""
             }
             
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"   ❌ Error en Ollama: {e}")
             return {"success": False, "error": str(e)}
     
@@ -383,7 +383,7 @@ Output ONLY the code, no explanations."""
                         ]])
                         predictions[model_name] = float(pred[0])
                     except Exception as e:
-                        logger.error(f"Error: {e}", exc_info=True)
+                        self.logger.error(f"Error: {e}", exc_info=True)
                         pass
                 
                 # Generar código basado en predicciones (template-based)
@@ -405,7 +405,7 @@ Output ONLY the code, no explanations."""
                 return {"success": False, "error": "No trained models"}
                 
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"   ❌ Error en ML Pipeline: {e}")
             return {"success": False, "error": str(e)}
     
@@ -447,7 +447,7 @@ class GeneratedModule:
             # IMPLEMENTED: Implement logic
             return {"success": True, "data": data}
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"Error: {e}")
             return {"success": False, "error": str(e)}
 
@@ -545,7 +545,7 @@ class BaseProcessor(ABC):
             result = self._process_impl(data)
             return {{"success": True, "result": result}}
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"Processing error: {{e}}")
             return {{"success": False, "error": str(e)}}
 
@@ -732,7 +732,7 @@ Output as JSON with keys: structure, components, dependencies, config_files"""
                     import json
                     architecture = json.loads(architecture_text)
                 except Exception as e:
-                    logger.error(f"Error: {e}", exc_info=True)
+                    self.logger.error(f"Error: {e}", exc_info=True)
                     architecture = {
                         "structure": self._extract_structure(architecture_text),
                         "components": self._extract_components(architecture_text),
@@ -748,7 +748,7 @@ Output as JSON with keys: structure, components, dependencies, config_files"""
                 return self._generate_architecture_heuristic(task)
                 
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"   ❌ Architecture generation error: {e}")
             return self._generate_architecture_heuristic(task)
     
@@ -810,7 +810,7 @@ Output as JSON with keys: structure, components, dependencies, config_files"""
                                 "error": result.get('error', 'Unknown')
                             })
                     except Exception as e:
-                        logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+                        self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                         self.logger.error(f"   ❌ Error generando {file_path}: {e}")
                         results['errors'].append({"file": file_path, "error": str(e)})
                         results['success'] = False
@@ -824,7 +824,7 @@ Output as JSON with keys: structure, components, dependencies, config_files"""
             return results
             
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"   ❌ Parallel generation error: {e}")
             results['success'] = False
             results['error'] = str(e)
@@ -870,7 +870,7 @@ Output ONLY the code, no explanations."""
                 }
                 
         except Exception as e:
-            logger.error(f"Error: {e}", exc_info=True)
+            self.logger.error(f"Error: {e}", exc_info=True)
             return {"success": False, "error": str(e), "path": spec['path']}
     
     def _generate_tests_with_llm(
@@ -915,7 +915,7 @@ Output test file content."""
                 return {"success": False, "error": "Test generation failed"}
                 
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"   ❌ Test generation error: {e}")
             return {"success": False, "error": str(e)}
     
@@ -960,7 +960,7 @@ METACORTEX Military-Grade Programming Agent v5.0
             }
             
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"   ❌ Documentation error: {e}")
             return {"success": False, "error": str(e)}
     
@@ -1109,7 +1109,7 @@ Output improved code ONLY."""
                 return {"success": False, "error": "LLM refinement failed"}
                 
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"   ❌ Refinement error: {e}")
             return {"success": False, "error": str(e)}
     
@@ -1274,7 +1274,7 @@ class MetacortexUniversalProgrammingAgent:
             )
             self.logger.info("✅ AutoGitManager inicializado - commits automáticos activos")
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.warning(f"⚠️ AutoGitManager no disponible: {e}")
             self.auto_git_manager = None
 
@@ -1345,7 +1345,7 @@ class MetacortexUniversalProgrammingAgent:
             self.logger.info("✅ Módulos militares completamente integrados")
 
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.warning(f"⚠️ Error inicializando módulos militares: {e}")
 
         # Estado del agente
@@ -1404,7 +1404,7 @@ class MetacortexUniversalProgrammingAgent:
                 )
                 self.event_store.append(event)
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.debug(f"No se pudo registrar evento: {e}")
 
     def _register_in_neural_network(self):
@@ -1416,7 +1416,7 @@ class MetacortexUniversalProgrammingAgent:
             self.neural_network.register_module("programming_agent", self)
             self.logger.info("✅ Módulo 'programming_agent' registrado en red neuronal")
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.warning(f"⚠️ No se pudo registrar en red neuronal: {e}")
             self.neural_network = None
 
@@ -1471,7 +1471,7 @@ class MetacortexUniversalProgrammingAgent:
                 self.workspace_context["scanning"] = False
                 self.logger.info("✅ Escaneo de workspace completado")
             except Exception as e:
-                logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+                self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                 self.logger.error(f"❌ Error en escaneo: {e}")
 
         thread = threading.Thread(target=scan, daemon=True, name="WorkspaceScanner")
@@ -1486,7 +1486,7 @@ class MetacortexUniversalProgrammingAgent:
             else:
                 self.logger.info("ℹ️ Sistema funcionando en modo autónomo")
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.warning(f"⚠️ Error en integración METACORTEX: {e}")
 
     def _initialize_knowledge_system(self):
@@ -1558,7 +1558,7 @@ class MetacortexUniversalProgrammingAgent:
                     )
 
                 except ImportError as e:
-                    logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+                    self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                     self.logger.warning(
                         f"⚠️ Knowledge Ingestion Engine no disponible: {e}"
                     )
@@ -1573,7 +1573,7 @@ class MetacortexUniversalProgrammingAgent:
                 self.logger.info("✅ Memoria de trabajo conectada (1000 slots)")
 
             except Exception as e:
-                logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+                self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                 self.logger.warning(f"⚠️ Error conectando sistema de conocimiento: {e}")
                 self.working_memory = None
 
@@ -1587,7 +1587,7 @@ class MetacortexUniversalProgrammingAgent:
             self.knowledge_system_available = True
 
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.warning(f"⚠️ Error conectando sistema de conocimiento: {e}")
             self.knowledge_system_available = False
             self.learning_system = None
@@ -1885,7 +1885,7 @@ class MetacortexUniversalProgrammingAgent:
                             self.logger.info(f"   ✅ {os.path.basename(file_path)}: Score {test_report.score:.1f}/100")
                     
                     except Exception as e:
-                        logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+                        self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                         self.logger.error(f"   ❌ Error testing/reparando {file_path}: {e}")
             
             # Calcular métricas finales de testing
@@ -1935,7 +1935,7 @@ class MetacortexUniversalProgrammingAgent:
             }
 
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"❌ Error creando proyecto: {e}")
 
             traceback.print_exc()
@@ -2119,7 +2119,7 @@ class MetacortexUniversalProgrammingAgent:
                             self.logger.warning(f"         Error: {result.get('error')}")
                         
                 except Exception as e:
-                    logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+                    self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                     self.logger.error(f"      ❌ Error materializando pensamiento {i}: {e}")
                     continue
 
@@ -2176,7 +2176,7 @@ class MetacortexUniversalProgrammingAgent:
                 self.logger.info(f"   • Patrones acelerados: {growth_result.get('patterns_accelerated', 0)}")
                 
             except Exception as e:
-                logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+                self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                 self.logger.warning(f"   ⚠️ Crecimiento exponencial no disponible: {e}")
 
             # Determinar éxito real
@@ -2206,7 +2206,7 @@ class MetacortexUniversalProgrammingAgent:
                         self.auto_git_manager.auto_commit_generated_files(result)
                         self.logger.info("   ✅ Auto-commit completado")
                     except Exception as e:
-                        logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+                        self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                         self.logger.warning(f"   ⚠️ Auto-commit falló: {e}")
             else:
                 self.logger.info("ℹ️ Materialización sin cambios (sistema estable)")
@@ -2214,7 +2214,7 @@ class MetacortexUniversalProgrammingAgent:
             return result
 
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"❌ Error materializando: {e}")
             self.logger.error(traceback.format_exc())
             return {
@@ -2257,7 +2257,7 @@ class MetacortexUniversalProgrammingAgent:
                     time.sleep(300)  # 5 minutos
 
                 except Exception as e:
-                    logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+                    self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                     self.logger.error(f"❌ Error en loop autónomo: {e}")
                     time.sleep(60)
 
@@ -2396,7 +2396,7 @@ class MetacortexUniversalProgrammingAgent:
                                 }
                             )
                 except Exception as e:
-                    logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+                    self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                     self.logger.debug(f"No se pudo ingerir: {e}")
 
             # Sintetizar respuesta
@@ -2435,7 +2435,7 @@ class MetacortexUniversalProgrammingAgent:
             }
 
         except Exception as e:
-            logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
+            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.error(f"❌ Error consultando conocimiento: {e}")
 
             traceback.print_exc()
