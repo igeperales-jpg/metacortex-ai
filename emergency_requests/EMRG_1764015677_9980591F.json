@@ -1,0 +1,14 @@
+{
+  "request_id": "EMRG_1764015677_9980591F",
+  "channel": "telegram",
+  "urgency": "urgent",
+  "status": "received",
+  "name": null,
+  "contact_info": "8597443794",
+  "location": null,
+  "threat_type": "other",
+  "description": "\u00bfComo me puedes ayudar?",
+  "needs": [],
+  "received_at": "2025-11-24T21:21:17.801433",
+  "is_verified": false
+}
