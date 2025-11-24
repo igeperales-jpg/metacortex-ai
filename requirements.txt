@@ -45,3 +45,15 @@ pytest-asyncio>=0.21.0
 
 # --- Type Checking (Development) ---
 mypy>=1.5.0
+
+# --- Payment Processing (REAL MONEY) ---
+stripe>=7.0.0
+paypal-checkout-serversdk>=1.0.0
+web3>=6.11.0
+bitcoin>=1.1.42
+cryptography>=41.0.0
+
+# --- Security & Authentication ---
+pyjwt>=2.8.0
+slowapi>=0.1.9
+python-multipart>=0.0.6
