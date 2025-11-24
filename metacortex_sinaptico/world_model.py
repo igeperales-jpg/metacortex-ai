@@ -757,3 +757,31 @@ if __name__ == "__main__":
             expected_outcome="Expand knowledge",
             safety_level=1.0,
         )
+
+
+# ============================================================================
+# GLOBAL INSTANCE FOR NEURAL NETWORK INTEGRATION
+# ============================================================================
+
+_global_world_model: Optional[WorldModel] = None
+
+
+def get_world_model() -> WorldModel:
+    """
+    Obtiene la instancia global del World Model.
+    Se inicializa lazy en el primer acceso.
+    
+    Returns:
+        Instancia global de WorldModel
+    """
+    global _global_world_model
+    if _global_world_model is None:
+        logger.info("🌍 Inicializando World Model global...")
+        try:
+            _global_world_model = WorldModel()
+            logger.info("✅ World Model inicializado")
+        except Exception as e:
+            logger.error(f"❌ Error inicializando World Model: {e}")
+            # Crear instancia mínima
+            _global_world_model = WorldModel()
+    return _global_world_model

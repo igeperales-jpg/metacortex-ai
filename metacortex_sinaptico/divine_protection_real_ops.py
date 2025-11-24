@@ -1177,6 +1177,34 @@ async def emergency_response_protocol(
     }
 
 
+# ============================================================================
+# GLOBAL INSTANCE FOR NEURAL NETWORK INTEGRATION
+# ============================================================================
+
+_global_real_ops: Optional['RealOperationsSystem'] = None
+
+
+def get_divine_protection_real_ops() -> 'RealOperationsSystem':
+    """
+    Obtiene la instancia global del Real Operations System.
+    Se inicializa lazy en el primer acceso.
+    
+    Returns:
+        Instancia global de RealOperationsSystem
+    """
+    global _global_real_ops
+    if _global_real_ops is None:
+        logger.info("🚨 Inicializando Divine Protection Real Ops global...")
+        try:
+            _global_real_ops = create_real_operations_system()
+            logger.info("✅ Divine Protection Real Ops inicializado")
+        except Exception as e:
+            logger.error(f"❌ Error inicializando Real Ops: {e}")
+            # Crear instancia mínima
+            _global_real_ops = RealOperationsSystem()
+    return _global_real_ops
+
+
 if __name__ == "__main__":
     # Demo del sistema
     logging.basicConfig(level=logging.INFO)

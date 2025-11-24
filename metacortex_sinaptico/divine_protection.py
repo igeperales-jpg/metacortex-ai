@@ -27,7 +27,7 @@ import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 from .autonomous_decisions import DecisionContext, create_autonomous_decision_engine
 from .autonomous_resource_network import ResourceType as NetworkResourceType, get_autonomous_network
@@ -1856,6 +1856,41 @@ def create_divine_protection_system(
     return DivineProtectionSystem(
         db=db, bdi_system=bdi_system, planner=planner, memory=memory, learning=learning
     )
+
+
+# ============================================================================
+# GLOBAL INSTANCE FOR NEURAL NETWORK INTEGRATION
+# ============================================================================
+
+_global_divine_protection: Optional[DivineProtectionSystem] = None
+
+
+def get_divine_protection() -> DivineProtectionSystem:
+    """
+    Obtiene la instancia global del Divine Protection System.
+    Se inicializa lazy en el primer acceso.
+    
+    Returns:
+        Instancia global de DivineProtectionSystem
+    """
+    global _global_divine_protection
+    if _global_divine_protection is None:
+        logger.info("🛡️ Inicializando Divine Protection System global...")
+        try:
+            db = MetacortexDB()
+            _global_divine_protection = create_divine_protection_system(db)
+            logger.info("✅ Divine Protection System inicializado")
+        except Exception as e:
+            logger.error(f"❌ Error inicializando Divine Protection: {e}")
+            # Crear instancia mínima sin dependencias
+            _global_divine_protection = DivineProtectionSystem(
+                db=MetacortexDB(),
+                bdi_system=None,
+                planner=None,
+                memory=None,
+                learning=None
+            )
+    return _global_divine_protection
 
 
 # Punto de entrada para testing
