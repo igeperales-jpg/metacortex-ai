@@ -895,8 +895,15 @@ start_system() {
     echo "$emergency_pid" > "${PID_DIR}/emergency_contact.pid"
     log_success "      Emergency Contact System STANDALONE iniciado (PID: $emergency_pid)"
     
+    # API Monetization Server STANDALONE (puerto 8100) - Sistema de ingresos
+    log_info "   → API Monetization Server STANDALONE (puerto 8100)..."
+    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/metacortex_sinaptico/api_monetization_endpoint.py" > "${LOGS_DIR}/api_monetization_stdout.log" 2>&1 &
+    local api_monetization_pid=$!
+    echo "$api_monetization_pid" > "${PID_DIR}/api_monetization.pid"
+    log_success "      API Monetization Server STANDALONE iniciado (PID: $api_monetization_pid)"
+    
     # Esperar 3 segundos para que los servicios standalone inicien (ultra-rápido)
-    log_info "   ⏳ Esperando servicios standalone (5s - incluyendo Emergency Contact)..."
+    log_info "   ⏳ Esperando servicios standalone (5s - incluyendo Emergency Contact + API)..."
     sleep 5
     
     # Verificar que están corriendo
@@ -922,6 +929,12 @@ start_system() {
         log_success "   ✅ Emergency Contact System: ACTIVO (PID: $emergency_pid, Puerto 8200)"
     else
         log_warning "   ⚠️ Emergency Contact System: NO ACTIVO (ver logs/emergency_contact_stdout.log)"
+    fi
+    
+    if ps -p "$api_monetization_pid" > /dev/null 2>&1; then
+        log_success "   ✅ API Monetization Server: ACTIVO (PID: $api_monetization_pid, Puerto 8100)"
+    else
+        log_warning "   ⚠️ API Monetization Server: NO ACTIVO (ver logs/api_monetization_stdout.log)"
     fi
     
     # ============================================================================
@@ -1087,6 +1100,7 @@ stop_system() {
     pkill -9 -f "python.*neural_network_service/server.py" 2>/dev/null || true
     pkill -9 -f "python.*web_interface/server.py" 2>/dev/null || true
     pkill -9 -f "python.*telemetry_service/server.py" 2>/dev/null || true
+    pkill -9 -f "python.*api_monetization_endpoint.py" 2>/dev/null || true
     pkill -9 -f "python.*start_telemetry_simple.py" 2>/dev/null || true
     pkill -9 -f "python.*start_neural_network.py" 2>/dev/null || true
     pkill -9 -f "python.*start_web_interface.py" 2>/dev/null || true
@@ -1269,6 +1283,17 @@ show_status() {
         echo -e "   ${RED}●${RESET} Emergency Contact System: No activo"
     fi
     
+    # Verificar API Monetization Server
+    local api_count=$(pgrep -f "api_monetization_endpoint.py" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$api_count" -gt 0 ]; then
+        local api_pid=$(pgrep -f "api_monetization_endpoint.py" 2>/dev/null | head -1)
+        echo -e "   ${GREEN}●${RESET} API Monetization Server: Activo (PID: $api_pid, Puerto 8100)"
+        echo -e "   ${CYAN}     💰 API Docs: http://localhost:8100/docs${RESET}"
+        echo -e "   ${CYAN}     💳 Stripe: CONFIGURADO (modo de prueba)${RESET}"
+    else
+        echo -e "   ${RED}●${RESET} API Monetization Server: No activo"
+    fi
+    
     # Verificar Ollama
     if lsof -i:11434 -sTCP:LISTEN > /dev/null 2>&1; then
         local ollama_pid=$(lsof -i:11434 -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $2}')
@@ -1328,6 +1353,14 @@ show_status() {
         echo -e "   ${GREEN}●${RESET} Puerto 8200 (Emergency Contact): $process (PID $pid)"
     else
         echo -e "   ${RED}●${RESET} Puerto 8200 (Emergency Contact): Libre"
+    fi
+    
+    if lsof -i:8100 -sTCP:LISTEN > /dev/null 2>&1; then
+        local process=$(lsof -i:8100 -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $1}')
+        local pid=$(lsof -i:8100 -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $2}')
+        echo -e "   ${GREEN}●${RESET} Puerto 8100 (API Monetization): $process (PID $pid)"
+    else
+        echo -e "   ${RED}●${RESET} Puerto 8100 (API Monetization): Libre"
     fi
     
     if lsof -i:11434 -sTCP:LISTEN > /dev/null 2>&1; then
