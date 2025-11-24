@@ -321,6 +321,13 @@ start_system() {
     echo "$telemetry_pid" > "${PID_DIR}/telemetry.pid"
     log_success "      Telemetry System STANDALONE iniciado (PID: $telemetry_pid)"
     
+    # 🚨 Emergency Contact System (puerto 8200) - CRÍTICO para protección
+    log_info "   → Emergency Contact System (puerto 8200) - SISTEMA DE VIDA O MUERTE..."
+    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/metacortex_sinaptico/emergency_contact_system.py" > "${LOGS_DIR}/emergency_contact_stdout.log" 2>&1 &
+    local emergency_pid=$!
+    echo "$emergency_pid" > "${PID_DIR}/emergency_contact.pid"
+    log_success "      Emergency Contact System iniciado (PID: $emergency_pid)"
+    
     # 🤖 Ollama LLM Server (puerto 11434) - CRÍTICO para agentes
     log_info "   → Verificando Ollama (puerto 11434)..."
     if lsof -i:11434 -sTCP:LISTEN > /dev/null 2>&1; then
@@ -359,6 +366,15 @@ start_system() {
         log_success "   ✅ Telemetry System: ACTIVO (PID: $telemetry_pid)"
     else
         log_warning "   ⚠️ Telemetry System: NO ACTIVO (ver logs/telemetry.log)"
+    fi
+    
+    # Verificar Emergency Contact System
+    if ps -p "$emergency_pid" > /dev/null 2>&1; then
+        log_success "   ✅ Emergency Contact System: ACTIVO (PID: $emergency_pid)"
+        log_info "      🌐 Portal web: http://localhost:8200"
+        log_info "      🚨 Endpoint de emergencia: POST http://localhost:8200/emergency"
+    else
+        log_warning "   ⚠️ Emergency Contact System: NO ACTIVO (ver logs/emergency_contact.log)"
     fi
     
     # Verificar Ollama
@@ -506,6 +522,7 @@ stop_system() {
     pkill -9 -f "python.*web_interface/server.py" 2>/dev/null || true
     pkill -9 -f "python.*orchestrator.py" 2>/dev/null || true
     pkill -9 -f "python.*ml_pipeline.py" 2>/dev/null || true
+    pkill -9 -f "python.*emergency_contact_system.py" 2>/dev/null || true
     
     # Detener Ollama si fue iniciado por METACORTEX
     if [ -f "${PID_DIR}/ollama.pid" ]; then
@@ -663,6 +680,16 @@ show_status() {
         echo -e "   ${RED}●${RESET} Telemetry System: No activo"
     fi
     
+    # Verificar Emergency Contact System
+    local emergency_count=$(pgrep -f "emergency_contact_system.py" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$emergency_count" -gt 0 ]; then
+        local emergency_pid=$(pgrep -f "emergency_contact_system.py" 2>/dev/null | head -1)
+        echo -e "   ${GREEN}●${RESET} Emergency Contact System: Activo (PID: $emergency_pid, Puerto 8200)"
+        echo -e "   ${CYAN}     🌐 Portal: http://localhost:8200${RESET}"
+    else
+        echo -e "   ${RED}●${RESET} Emergency Contact System: No activo"
+    fi
+    
     # Verificar Ollama
     if lsof -i:11434 -sTCP:LISTEN > /dev/null 2>&1; then
         local ollama_pid=$(lsof -i:11434 -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $2}')
@@ -714,6 +741,14 @@ show_status() {
         echo -e "   ${GREEN}●${RESET} Puerto 9090 (Telemetry): $process (PID $pid)"
     else
         echo -e "   ${RED}●${RESET} Puerto 9090 (Telemetry): Libre"
+    fi
+    
+    if lsof -i:8200 -sTCP:LISTEN > /dev/null 2>&1; then
+        local process=$(lsof -i:8200 -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $1}')
+        local pid=$(lsof -i:8200 -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $2}')
+        echo -e "   ${GREEN}●${RESET} Puerto 8200 (Emergency Contact): $process (PID $pid)"
+    else
+        echo -e "   ${RED}●${RESET} Puerto 8200 (Emergency Contact): Libre"
     fi
     
     if lsof -i:11434 -sTCP:LISTEN > /dev/null 2>&1; then
