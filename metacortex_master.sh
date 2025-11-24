@@ -12,6 +12,7 @@
 #   ./metacortex_master.sh status     - Ver estado de todos los servicios
 #   ./metacortex_master.sh emergency  - Apagado de emergencia (mata todo)
 #   ./metacortex_master.sh clean      - Limpiar logs y archivos temporales
+#   ./metacortex_master.sh deploy     - Desplegar Emergency System públicamente
 #
 
 set -euo pipefail
@@ -225,6 +226,290 @@ wait_for_process() {
         return 1
     fi
     return 0
+}
+
+# ============================================================================
+# FUNCIONES DE DESPLIEGUE PÚBLICO
+# ============================================================================
+deploy_emergency_public() {
+    print_header "🌐 DESPLIEGUE PÚBLICO - EMERGENCY CONTACT SYSTEM"
+    
+    log_info "Opciones de despliegue público para contactar personas en peligro:"
+    echo ""
+    echo "  1) 📱 Telegram Bot (RECOMENDADO - GRATIS Y GLOBAL)"
+    echo "     • Accesible desde cualquier país AHORA"
+    echo "     • No necesita servidor público"
+    echo "     • Funciona con internet intermitente"
+    echo "     • 100% gratis para siempre"
+    echo ""
+    echo "  2) ☁️ Cloudflare Tunnel (PRODUCCIÓN)"
+    echo "     • URL permanente y profesional"
+    echo "     • HTTPS automático"
+    echo "     • Sin límites de tráfico"
+    echo "     • DDoS protection incluido"
+    echo ""
+    echo "  3) 🌐 ngrok (TESTING RÁPIDO)"
+    echo "     • Para pruebas inmediatas"
+    echo "     • URL temporal"
+    echo ""
+    
+    read -p "Selecciona opción [1-3]: " option
+    
+    case "$option" in
+        1)
+            setup_telegram_bot
+            ;;
+        2)
+            setup_cloudflare_tunnel
+            ;;
+        3)
+            setup_ngrok_tunnel
+            ;;
+        *)
+            log_error "Opción inválida"
+            return 1
+            ;;
+    esac
+}
+
+setup_telegram_bot() {
+    print_header "📱 CONFIGURACIÓN TELEGRAM BOT - ACCESO GLOBAL"
+    
+    log_success "✅ Telegram Bot NO necesita servidor público"
+    log_info "Se conecta automáticamente desde tu iMac a Telegram"
+    log_info "Las personas pueden contactarlo desde CUALQUIER PAÍS"
+    echo ""
+    
+    log_info "PASOS PARA CREAR TU BOT:"
+    echo "1. Abre Telegram en tu teléfono/computadora"
+    echo "2. Busca: @BotFather"
+    echo "3. Envía: /newbot"
+    echo "4. Nombre del bot: METACORTEX Divine Protection"
+    echo "5. Username: metacortex_divine_bot (o el que prefieras)"
+    echo "6. Copia el TOKEN que te da BotFather"
+    echo ""
+    
+    read -p "¿Ya tienes el token de @BotFather? (s/n): " has_token
+    
+    if [ "$has_token" = "s" ]; then
+        read -p "Pega tu TELEGRAM_BOT_TOKEN aquí: " telegram_token
+        
+        # Guardar en .env
+        if [ -f "${PROJECT_ROOT}/.env" ]; then
+            if grep -q "TELEGRAM_BOT_TOKEN=" "${PROJECT_ROOT}/.env"; then
+                # Actualizar token existente (macOS sed syntax)
+                sed -i '' "s/TELEGRAM_BOT_TOKEN=.*/TELEGRAM_BOT_TOKEN=$telegram_token/" "${PROJECT_ROOT}/.env"
+            else
+                echo "TELEGRAM_BOT_TOKEN=$telegram_token" >> "${PROJECT_ROOT}/.env"
+            fi
+        else
+            echo "TELEGRAM_BOT_TOKEN=$telegram_token" > "${PROJECT_ROOT}/.env"
+        fi
+        
+        log_success "✅ Token guardado en .env"
+        
+        # Probar conexión
+        log_info "🔍 Probando conexión con Telegram..."
+        "$VENV_PYTHON" -c "
+import os
+import sys
+sys.path.insert(0, '${PROJECT_ROOT}')
+
+from telegram import Bot
+import asyncio
+
+async def test_bot():
+    try:
+        bot = Bot(token='$telegram_token')
+        me = await bot.get_me()
+        print('\n✅ Bot conectado exitosamente!')
+        print(f'   Nombre: {me.first_name}')
+        print(f'   Username: @{me.username}')
+        print(f'\n🌐 URL PÚBLICA GLOBAL: https://t.me/{me.username}')
+        print(f'\n📱 Las personas pueden buscar: @{me.username}')
+        print('\n🔥 El bot está ACTIVO y accesible desde CUALQUIER PAÍS')
+        return 0
+    except Exception as e:
+        print(f'\n❌ Error conectando: {e}')
+        print('Verifica que el token sea correcto')
+        return 1
+
+exit(asyncio.run(test_bot()))
+" || {
+            log_error "Error al probar el bot. Verifica el token."
+            return 1
+        }
+        
+        log_success "🎉 Telegram Bot configurado y PÚBLICO!"
+        log_info ""
+        log_info "PRÓXIMOS PASOS:"
+        log_info "1. Reinicia el sistema: ./metacortex_master.sh restart"
+        log_info "2. El bot empezará a recibir mensajes automáticamente"
+        log_info "3. Comparte el link del bot con personas en peligro"
+        log_info ""
+        log_warning "⚠️ IMPORTANTE: El bot funciona mientras tu iMac esté encendido"
+        log_info "   Por eso usamos caffeinate para mantenerlo 24/7"
+        
+    else
+        log_info ""
+        log_info "📝 INSTRUCCIONES DETALLADAS:"
+        log_info "1. Abre Telegram: https://telegram.org"
+        log_info "2. Busca: @BotFather (bot oficial de Telegram)"
+        log_info "3. Envía: /newbot"
+        log_info "4. Sigue las instrucciones"
+        log_info "5. Vuelve a ejecutar: ./metacortex_master.sh deploy"
+    fi
+}
+
+setup_cloudflare_tunnel() {
+    print_header "☁️ CLOUDFLARE TUNNEL - EXPOSICIÓN PÚBLICA PROFESIONAL"
+    
+    # Verificar cloudflared
+    if ! command -v cloudflared &> /dev/null; then
+        log_info "📦 cloudflared no está instalado. Instalando..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install cloudflared || {
+                log_error "Error instalando cloudflared con Homebrew"
+                log_info "Instala manualmente: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/"
+                return 1
+            }
+        else
+            log_error "Instala cloudflared: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/"
+            return 1
+        fi
+    fi
+    
+    log_success "✅ cloudflared instalado"
+    
+    # Verificar que Emergency System esté corriendo
+    if ! lsof -i:8200 -sTCP:LISTEN > /dev/null 2>&1; then
+        log_error "❌ Emergency Contact System NO está corriendo en puerto 8200"
+        log_info "Ejecuta primero: ./metacortex_master.sh start"
+        return 1
+    fi
+    
+    log_success "✅ Emergency Contact System corriendo en puerto 8200"
+    
+    # Login a Cloudflare
+    log_info "🔐 Autenticando con Cloudflare..."
+    if [ ! -f "$HOME/.cloudflared/cert.pem" ]; then
+        log_info "Se abrirá tu navegador para autenticarte con Cloudflare"
+        cloudflared tunnel login || {
+            log_error "Error en autenticación"
+            return 1
+        }
+    fi
+    
+    log_success "✅ Autenticado con Cloudflare"
+    
+    # Crear tunnel con nombre único
+    local tunnel_name="metacortex-emergency-$(date +%s)"
+    log_info "🚇 Creando túnel: $tunnel_name"
+    
+    cloudflared tunnel create "$tunnel_name" || {
+        log_error "Error creando túnel"
+        return 1
+    }
+    
+    local tunnel_id=$(cloudflared tunnel list | grep "$tunnel_name" | awk '{print $1}')
+    log_success "✅ Tunnel creado: $tunnel_id"
+    
+    # Configurar DNS
+    log_info "🌐 Configura tu dominio (o usa el gratuito de Cloudflare):"
+    read -p "¿Tienes un dominio en Cloudflare? (s/n): " has_domain
+    
+    if [ "$has_domain" = "s" ]; then
+        read -p "Ingresa tu dominio (ej: emergency.tudominio.com): " domain
+    else
+        domain="$tunnel_id.cfargotunnel.com"
+        log_info "Usando dominio gratuito: $domain"
+    fi
+    
+    # Crear configuración
+    mkdir -p "$HOME/.cloudflared"
+    cat > "$HOME/.cloudflared/config.yml" << EOF
+tunnel: $tunnel_id
+credentials-file: $HOME/.cloudflared/$tunnel_id.json
+
+ingress:
+  - hostname: $domain
+    service: http://localhost:8200
+  - service: http_status:404
+EOF
+    
+    log_success "✅ Configuración creada"
+    
+    # Configurar ruta DNS si tiene dominio
+    if [ "$has_domain" = "s" ]; then
+        log_info "Configurando DNS..."
+        cloudflared tunnel route dns "$tunnel_name" "$domain" || {
+            log_warning "No se pudo configurar DNS automáticamente"
+            log_info "Configura manualmente en Cloudflare Dashboard"
+        }
+    fi
+    
+    # Iniciar túnel en background
+    log_info "🚀 Iniciando túnel en background..."
+    nohup cloudflared tunnel run "$tunnel_name" > "${LOGS_DIR}/cloudflare_tunnel.log" 2>&1 &
+    local tunnel_pid=$!
+    echo "$tunnel_pid" > "${PID_DIR}/cloudflare_tunnel.pid"
+    
+    sleep 3
+    
+    if ps -p "$tunnel_pid" > /dev/null 2>&1; then
+        log_success "🎉 ¡Túnel ACTIVO!"
+        log_info ""
+        log_info "🌐 URL PÚBLICA: https://$domain"
+        log_info "📱 Endpoint de emergencia: https://$domain/emergency"
+        log_info "🔒 HTTPS automático y seguro"
+        log_info "📊 Monitorea en: https://dash.cloudflare.com"
+        log_info ""
+        log_info "PID del túnel: $tunnel_pid"
+        log_info "Logs: tail -f ${LOGS_DIR}/cloudflare_tunnel.log"
+    else
+        log_error "Error: Túnel no inició correctamente"
+        log_info "Ver logs: cat ${LOGS_DIR}/cloudflare_tunnel.log"
+        return 1
+    fi
+}
+
+setup_ngrok_tunnel() {
+    print_header "🌐 NGROK TUNNEL - TESTING RÁPIDO"
+    
+    # Verificar ngrok
+    if ! command -v ngrok &> /dev/null; then
+        log_info "📦 ngrok no está instalado. Instalando..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install ngrok/ngrok/ngrok || {
+                log_error "Error instalando ngrok"
+                log_info "Instala manualmente: https://ngrok.com/download"
+                return 1
+            }
+        else
+            log_error "Instala ngrok: https://ngrok.com/download"
+            return 1
+        fi
+    fi
+    
+    log_success "✅ ngrok instalado"
+    
+    # Verificar que Emergency System esté corriendo
+    if ! lsof -i:8200 -sTCP:LISTEN > /dev/null 2>&1; then
+        log_error "❌ Emergency Contact System NO está corriendo en puerto 8200"
+        log_info "Ejecuta primero: ./metacortex_master.sh start"
+        return 1
+    fi
+    
+    log_success "✅ Emergency Contact System corriendo en puerto 8200"
+    log_warning "⚠️ El túnel ngrok es TEMPORAL - se cerrará al detener ngrok"
+    log_info ""
+    log_info "🚀 Iniciando túnel público..."
+    log_info "🌐 URL pública estará disponible en unos segundos..."
+    log_info "📝 Presiona Ctrl+C para detener el túnel"
+    echo ""
+    
+    # Ejecutar ngrok (bloquea terminal, es para testing)
+    ngrok http 8200 --log=stdout --log-level=info
 }
 
 # ============================================================================
@@ -837,6 +1122,12 @@ COMANDOS DISPONIBLES:
   
   restart            Reiniciar el sistema completo
   status             Mostrar estado de todos los servicios
+  
+  deploy             🌐 Desplegar Emergency Contact System públicamente
+                     • Telegram Bot (global, gratis, 24/7)
+                     • Cloudflare Tunnel (profesional, HTTPS)
+                     • ngrok (testing rápido)
+  
   emergency          Apagado de emergencia (mata todo inmediatamente)
   clean              Limpiar archivos temporales y logs antiguos
   divine             Abrir interfaz Divine Protection System
@@ -904,6 +1195,9 @@ main() {
             ;;
         clean)
             clean_system
+            ;;
+        deploy)
+            deploy_emergency_public
             ;;
         divine)
             # Ejecutar Divine Protection System (mantiene script original)
