@@ -39,8 +39,8 @@ from .learning import StructuralLearning
 from .memory import MemorySystem
 from .planning import MultiHorizonPlanner, PlanPriority, TimeHorizon
 from pathlib import Path
-from programming_agent import CodeQuality, ProgrammingLanguage, ProjectType
-import random
+# NOTA: programming_agent se importa LAZY para evitar imports circulares
+# from programming_agent import CodeQuality, ProgrammingLanguage, ProjectType
 import random
 
 logger = logging.getLogger(__name__)
@@ -640,6 +640,9 @@ class DivineProtectionSystem:
 
             # 3. Generar mejoras usando programming_agent
             improvements_applied = []
+
+            # Import LAZY para evitar ciclos de importación
+            from programming_agent import CodeQuality, ProgrammingLanguage, ProjectType
 
             for improvement_type in improvements_needed:
                 logger.info(f"   🔧 Generando mejora: {improvement_type}")

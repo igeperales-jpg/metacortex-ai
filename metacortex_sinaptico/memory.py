@@ -593,8 +593,9 @@ class MemorySystem:
                 event = self.Event(
                     id=f"memory_search_{time.time()}",
                     category=self.EventCategory.MEMORY_RETRIEVE,
+                    source="memory_system",
                     source_module="memory_system",
-                    data={
+                    payload={
                         "query": query,
                         "results_count": len(results),
                         "top_score": results[0]["score"] if results else 0.0
@@ -603,7 +604,7 @@ class MemorySystem:
                 )
                 self.neural_hub.emit_event(event)
             except Exception as e:
-                logger.exception(f"Error in exception handler: {e}")
+                logger.exception(f"Error emitting event: {e}")
         return results
     
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
@@ -734,8 +735,9 @@ class MemorySystem:
                     event = self.Event(
                         id=f"consolidation_{time.time()}",
                         category=self.EventCategory.MEMORY_CONSOLIDATE,
+                        source="memory_system",
                         source_module="memory_system",
-                        data={
+                        payload={
                             "consolidated": consolidated,
                             "strategies": strategies_used
                         },
@@ -743,7 +745,7 @@ class MemorySystem:
                     )
                     self.neural_hub.emit_event(event)
                 except Exception as e:
-                    logger.exception(f"Error in exception handler: {e}")
+                    logger.exception(f"Error emitting event: {e}")
         return {
             "consolidated": consolidated,
             "strategies_used": strategies_used,
@@ -800,8 +802,9 @@ class MemorySystem:
                 event = self.Event(
                     id=f"episode_stored_{time.time()}",
                     category=self.EventCategory.MEMORY_STORE,
+                    source="memory_system",
                     source_module="memory_system",
-                    data={
+                    payload={
                         "name": name,
                         "type": "episode",
                         "importance": importance,
@@ -812,7 +815,7 @@ class MemorySystem:
                 )
                 self.neural_hub.emit_event(event)
             except Exception as e:
-                logger.exception(f"Error in exception handler: {e}")
+                logger.exception(f"Error emitting event: {e}")
         return episode_id
 
     def store_fact(
@@ -849,8 +852,9 @@ class MemorySystem:
                 event = self.Event(
                     id=f"fact_stored_{time.time()}",
                     category=self.EventCategory.MEMORY_STORE,
+                    source="memory_system",
                     source_module="memory_system",
-                    data={
+                    payload={
                         "key": key,
                         "type": "fact",
                         "confidence": confidence,
@@ -861,7 +865,7 @@ class MemorySystem:
                 )
                 self.neural_hub.emit_event(event)
             except Exception as e:
-                logger.exception(f"Error in exception handler: {e}")
+                logger.exception(f"Error emitting event: {e}")
     def recall_episodes(self, limit: int = 10, min_importance: float = 0.0) -> List[MemoryEntry]:
         """
         Recupera episodios recientes con actualización de patrones de acceso.

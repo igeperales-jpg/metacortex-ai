@@ -95,7 +95,12 @@ class MetacortexNeuralHub:
             for event_category, handler in handlers.items():
                 try:
                     # Convertir Enum a string para la suscripción
-                    event_type = event_category.value.lower()
+                    if hasattr(event_category, 'value'):
+                        # Es un Enum
+                        event_type = event_category.value.lower()
+                    else:
+                        # Ya es un string
+                        event_type = str(event_category).lower()
                     self.subscribe(event_type, handler)
                 except Exception as e:
                     self.logger.error(f"Error al suscribir handler para {event_category}: {e}")

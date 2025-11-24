@@ -1219,15 +1219,38 @@ class MetacortexUniversalProgrammingAgent:
     - MaterializationEngine: Materialización de pensamientos METACORTEX
     - WorkspaceScanner: Escaneo inteligente de workspace
     """
+    
+    # 🔒 Variable de clase para tracking de inicialización (SINGLETON PROTECTION)
+    _initialized = False
+    _init_lock = threading.Lock()
+    _master_instance: Optional["MetacortexUniversalProgrammingAgent"] = None
 
     def __init__(self, project_root: Optional[str] = None, cognitive_agent=None):
         """
         Inicializa el agente con arquitectura modular
+        
+        ⚠️ SINGLETON PROTECTION - Solo se inicializa completamente UNA VEZ
 
         Args:
             project_root: Directorio raíz del proyecto
             cognitive_agent: Agente cognitivo METACORTEX (opcional)
         """
+        # 🔒 SINGLETON PROTECTION - Copiar atributos de master instance si existe
+        with self._init_lock:
+            if MetacortexUniversalProgrammingAgent._initialized and \
+               MetacortexUniversalProgrammingAgent._master_instance is not None:
+                # Copiar todos los atributos de la instancia master
+                master = MetacortexUniversalProgrammingAgent._master_instance
+                self.__dict__.update(master.__dict__)
+                self.logger = get_unified_logger(__name__)
+                self.logger.debug("⚠️ Programming Agent - copiando atributos de singleton master")
+                return
+                
+            # Marcar como inicializado INMEDIATAMENTE para prevenir loops
+            MetacortexUniversalProgrammingAgent._initialized = True
+            # Guardar esta instancia como master
+            MetacortexUniversalProgrammingAgent._master_instance = self
+        
         self.project_root = Path(project_root or os.getcwd())
         self.logger = get_unified_logger(__name__)
         self.cognitive_agent = cognitive_agent
@@ -1268,13 +1291,12 @@ class MetacortexUniversalProgrammingAgent:
         # 🔄 AUTO GIT MANAGER para commits automáticos
         try:
             from auto_git_manager import get_auto_git_manager
+            # Corregir argumentos: repo_path en lugar de repo_root
             self.auto_git_manager = get_auto_git_manager(
-                repo_root=str(self.project_root),
-                logger=self.logger
+                repo_path=str(self.project_root)
             )
             self.logger.info("✅ AutoGitManager inicializado - commits automáticos activos")
         except Exception as e:
-            self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
             self.logger.warning(f"⚠️ AutoGitManager no disponible: {e}")
             self.auto_git_manager = None
 
@@ -2175,8 +2197,9 @@ class MetacortexUniversalProgrammingAgent:
                 self.logger.info(f"   • Cascada de mejoras: {growth_result.get('improvements_cascaded', 0)}")
                 self.logger.info(f"   • Patrones acelerados: {growth_result.get('patterns_accelerated', 0)}")
                 
+            except ImportError:
+                self.logger.warning("⚠️ exponential_growth_engine no disponible - omitiendo paso 5")
             except Exception as e:
-                self.logger.error(f"Error en programming_agent.py: {e}", exc_info=True)
                 self.logger.warning(f"   ⚠️ Crecimiento exponencial no disponible: {e}")
 
             # Determinar éxito real
@@ -2518,24 +2541,37 @@ class MetacortexUniversalProgrammingAgent:
 # ═══════════════════════════════════════════════════════════════════════════
 # FUNCIONES DE UTILIDAD
 # ═══════════════════════════════════════════════════════════════════════════
-
+# 🔒 SINGLETON GLOBAL para evitar loops infinitos
+_global_programming_agent: Optional[MetacortexUniversalProgrammingAgent] = None
+_agent_lock = threading.Lock()
 
 def get_programming_agent(
     project_root: Optional[str] = None, cognitive_agent=None
 ) -> MetacortexUniversalProgrammingAgent:
     """
-    Factory function para crear instancia del agente
-
+    Factory function SINGLETON para crear/obtener instancia del agente
+    
+    ⚠️ SINGLETON CRÍTICO - Evita loops infinitos en importaciones circulares
+    
     Args:
         project_root: Directorio raíz del proyecto
         cognitive_agent: Agente cognitivo (opcional)
 
     Returns:
-        Instancia del agente de programación
+        Instancia ÚNICA del agente de programación (singleton)
     """
-    return MetacortexUniversalProgrammingAgent(
-        project_root=project_root, cognitive_agent=cognitive_agent
-    )
+    global _global_programming_agent
+    
+    # Thread-safe singleton pattern
+    if _global_programming_agent is None:
+        with _agent_lock:
+            if _global_programming_agent is None:
+                _global_programming_agent = MetacortexUniversalProgrammingAgent(
+                    project_root=project_root, cognitive_agent=cognitive_agent
+                )
+                logging.info("✅ Programming Agent SINGLETON creado")
+    
+    return _global_programming_agent
 
 
 if __name__ == "__main__":

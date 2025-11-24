@@ -1,0 +1,14 @@
+{
+  "request_id": "EMRG_1763988825_F5CDE5D3",
+  "channel": "telegram",
+  "urgency": "normal",
+  "status": "received",
+  "name": null,
+  "contact_info": "8597443794",
+  "location": null,
+  "threat_type": "other",
+  "description": "Hola",
+  "needs": [],
+  "received_at": "2025-11-24T13:53:45.344860",
+  "is_verified": false
+}

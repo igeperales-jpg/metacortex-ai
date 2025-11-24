@@ -16,12 +16,25 @@ class MetacortexNeuralSymbioticNetworkV2:
         self.modules: Dict[str, Any] = {}
         logger.info("🧠 Neural Symbiotic Network V2 Initialized (Placeholder)")
 
-    def register_module(self, name: str, instance: Any):
+    def register_module(self, name: str, instance: Any, capabilities: Optional[list] = None, **kwargs):
         """
         Registers a module with the neural network.
+        
+        Args:
+            name: Module name
+            instance: Module instance
+            capabilities: Optional list of module capabilities
+            **kwargs: Additional optional arguments (ignored)
         """
-        self.modules[name] = instance
-        logger.info(f"✅ Module '{name}' registered with Neural Network.")
+        module_info = {
+            "instance": instance,
+            "capabilities": capabilities or [],
+            "metadata": kwargs
+        }
+        self.modules[name] = module_info
+        
+        caps_str = f" with {len(capabilities)} capabilities" if capabilities else ""
+        logger.info(f"✅ Module '{name}' registered with Neural Network{caps_str}")
 
     def share_knowledge(self, source_module: str, knowledge: Dict[str, Any]):
         """

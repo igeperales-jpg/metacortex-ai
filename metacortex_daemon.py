@@ -1503,23 +1503,26 @@ class MetacortexMilitaryDaemon:
 
             logger.info("🚀 Iniciando Ollama Server...")
 
-            # Iniciar ollama en background
-            process = subprocess.Popen(
-                ["ollama", "serve"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
+            # Iniciar ollama en background (no falla si ya está corriendo)
+            try:
+                process = subprocess.Popen(
+                    ["ollama", "serve"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            except Exception as e:
+                logger.debug(f"ollama serve falló (puede estar ya corriendo): {e}")
 
             # Esperar 5 segundos para que inicie
-
             time.sleep(5)
 
-            # Verificar si está corriendo
+            # Verificar si está corriendo (independiente del Popen)
             if self._check_port_status(11434):
-                logger.info(f"✅ Ollama Server iniciado correctamente (PID: {process.pid})")
+                logger.info("✅ Ollama Server activo (puerto 11434)")
                 return True
             logger.error("❌ Ollama Server no pudo iniciar")
+            logger.info("   Intenta manualmente: ollama serve")
             return False
 
         except Exception as e:
@@ -1550,13 +1553,12 @@ class MetacortexMilitaryDaemon:
                 ["brew", "services", "start", "redis"], capture_output=True, text=True, check=False
             )
 
-            if result.returncode == 0:
+            # Esperar y verificar (independientemente del return code)
+            time.sleep(2)
 
-                time.sleep(2)
-
-                if self._check_port_status(6379):
-                    logger.info("✅ Redis Server iniciado correctamente (brew services)")
-                    return True
+            if self._check_port_status(6379):
+                logger.info("✅ Redis Server activo (brew services)")
+                return True
 
             # Si brew falló, intentar manualmente
             logger.info("   Intentando inicio manual...")

@@ -1379,11 +1379,11 @@ class BDISystem:
         Returns:
             Intención seleccionada o None
         """
-        # Usar nuevo método con razonamiento híbrido + ética
+        # Usar método con razonamiento híbrido
         urgency = current_state.get("urgency", 0.5)
         complexity = current_state.get("complexity", 0.5)
         
-        return await self.select_intention_with_ethics(
+        return await self.select_intention_with_hybrid_reasoning(
             current_state=current_state,
             urgency=urgency,
             complexity=complexity

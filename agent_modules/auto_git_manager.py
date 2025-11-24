@@ -24,7 +24,7 @@ import os
 import subprocess
 import threading
 import time
-from typing import Optional, Tuple, Any
+from typing import Optional, Tuple, Any, Dict
 
 # Configuración del logging
 logger = logging.getLogger(__name__)
@@ -191,6 +191,36 @@ class AutoGitManager:
             
         logger.info("✅ Ciclo automático de commit y push completado exitosamente.")
         return True
+
+    def auto_commit_generated_files(self, result: Dict[str, Any]) -> bool:
+        """
+        Método para auto-commit de archivos generados por materialización.
+        
+        Args:
+            result: Diccionario con información de la materialización
+                   (thought_type, file_path, description, etc.)
+        
+        Returns:
+            bool: True si el commit fue exitoso, False en caso contrario
+        """
+        try:
+            # Extraer información del resultado
+            file_path = result.get('file_path', 'Unknown file')
+            description = result.get('description', 'Generated file')
+            thought_type = result.get('thought_type', 'materialization')
+            
+            # Crear mensaje de commit descriptivo
+            commit_message = f"[AUTO] {thought_type}: {description}"
+            if file_path != 'Unknown file':
+                commit_message += f" ({file_path})"
+            
+            # Realizar commit
+            logger.info(f"🔄 Auto-committing: {commit_message}")
+            return self.commit(commit_message)
+            
+        except Exception as e:
+            logger.error(f"Error en auto_commit_generated_files: {e}")
+            return False
 
 # Singleton global
 _git_manager_instance: Optional[AutoGitManager] = None

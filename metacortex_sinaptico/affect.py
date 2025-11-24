@@ -7,7 +7,7 @@ import logging
 import random
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Protocol
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .emotional_models import Emotion, EmotionalTrait
 from .metacortex_neural_hub import MetacortexNeuralHub
@@ -38,6 +38,7 @@ class EmotionalState:
     arousal: float = 0.5
     activation: float = 0.5  # Añadido para compatibilidad
     mood: str = "calm"
+    last_update: datetime = field(default_factory=datetime.now)
     
     @property
     def energy(self) -> float:
@@ -326,6 +327,29 @@ class AffectSystem:
         
         self.logger.info(f"Generando insights emocionales: {insights}")
         return insights
+
+    def get_wellbeing(self) -> float:
+        """
+        Calcula un score de bienestar basado en el estado emocional actual.
+        
+        Returns:
+            float: Score de bienestar entre 0.0 (muy mal) y 1.0 (muy bien)
+        """
+        state = self.emotional_state.get_state()
+        
+        # Calcular bienestar basado en valencia y arousal
+        valence = state.get("valence", 0.0)
+        arousal = state.get("arousal", 0.5)
+        
+        # Bienestar alto = valencia positiva + arousal moderado
+        # Bienestar bajo = valencia negativa
+        wellbeing = (valence + 1.0) / 2.0  # Normalizar de [-1, 1] a [0, 1]
+        
+        # Penalizar arousal muy alto o muy bajo
+        arousal_penalty = abs(arousal - 0.5) * 0.2
+        wellbeing = max(0.0, min(1.0, wellbeing - arousal_penalty))
+        
+        return wellbeing
 
 # Ejemplo de uso (si se ejecuta el archivo directamente)
 async def main():

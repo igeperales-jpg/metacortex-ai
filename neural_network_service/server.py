@@ -477,8 +477,8 @@ async def shutdown_event():
 def main():
     """Punto de entrada principal"""
     try:
-        # Configurar puerto (8080 para evitar conflictos)
-        port = int(os.environ.get("NEURAL_SERVICE_PORT", "8080"))
+        # Configurar puerto (8001 para evitar conflicto con Web Interface en 8080)
+        port = int(os.environ.get("NEURAL_SERVICE_PORT", "8001"))
         host = os.environ.get("NEURAL_SERVICE_HOST", "0.0.0.0")
         
         logger.info(f"🚀 Iniciando servidor en {host}:{port}")

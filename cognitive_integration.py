@@ -97,7 +97,7 @@ class CognitiveOrchestrationBridge:
                 from cognitive_agent_pool import get_cognitive_agent_pool
                 
                 pool = get_cognitive_agent_pool()
-                self._cognitive_agent = pool.get_agent(timeout=30)
+                self._cognitive_agent = pool.acquire(agent_type="default")
                 
                 if self._cognitive_agent:
                     self._components_initialized["cognitive_agent"] = True
@@ -808,13 +808,16 @@ class CognitiveOrchestrationBridge:
                 # Guardar mejoras pendientes en memoria para aplicar después
                 for improvement in improvements_needed:
                     try:
-                        self.memory_unified.add_episodic_memory(
-                            event_type="pending_improvement",
-                            details=improvement["description"],
+                        self.memory_unified.store_episode(
+                            content={
+                                "event_type": "pending_improvement",
+                                "details": improvement["description"],
+                                "priority": improvement["priority"]
+                            },
+                            context=str(improvement),
                             importance=0.8
                             if improvement["priority"] == "high"
-                            else 0.6,
-                            context=str(improvement),
+                            else 0.6
                         )
                     except Exception as e:
                         logger.error(

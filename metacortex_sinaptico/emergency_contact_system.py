@@ -73,6 +73,14 @@ except ImportError:
 from dotenv import load_dotenv
 load_dotenv()
 
+# AI Integration Layer
+try:
+    from metacortex_sinaptico.ai_integration_layer import get_ai_integration
+    AI_INTEGRATION_AVAILABLE = True
+except ImportError:
+    AI_INTEGRATION_AVAILABLE = False
+    logging.warning("⚠️ AI Integration Layer not available")
+
 logger = logging.getLogger(__name__)
 
 
@@ -197,12 +205,22 @@ class EmergencyContactSystem:
         self.requests_dir = project_root / "emergency_requests"
         self.requests_dir.mkdir(exist_ok=True, parents=True)
         
+        # AI Integration Layer - DEBE SER PRIMERO
+        if AI_INTEGRATION_AVAILABLE:
+            self.ai = get_ai_integration(project_root)
+            self.ai.connect_emergency_contact(self)
+            logger.info("✅ AI Integration connected to Emergency Contact System")
+        else:
+            self.ai = None
+            logger.warning("⚠️ AI Integration not available - using basic responses")
+        
         # Storage de solicitudes activas
         self.active_requests: Dict[str, EmergencyRequest] = {}
         self.request_history: List[EmergencyRequest] = []
         
         # Configuración de canales
         self.telegram_bot = None
+        self.telegram_app = None  # Guardamos el Application también
         self.telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
         
         self.email_address = os.getenv("EMERGENCY_EMAIL", "emergency@metacortex.ai")
@@ -620,21 +638,46 @@ async def telegram_help_command(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def telegram_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler para mensajes del bot"""
+    """Handler para mensajes del bot - AHORA CON IA"""
     chat_id = str(update.effective_chat.id)
+    username = update.effective_user.username or "Anonymous"
     message_text = update.message.text
     
-    # Crear solicitud con el mensaje
-    await contact_system.receive_request(
-        channel=ContactChannel.TELEGRAM,
-        contact_info=chat_id,
-        description=message_text,
-        threat_type=ThreatType.OTHER
-    )
+    logger.info(f"📨 Telegram message from {username} ({chat_id}): {message_text[:100]}")
     
-    await update.message.reply_text(
-        "✅ Message received. Processing your request..."
-    )
+    # USAR IA PARA GENERAR RESPUESTA INTELIGENTE
+    if contact_system.ai:
+        try:
+            # Generar respuesta con IA
+            ai_response = await contact_system.ai.generate_telegram_response(
+                message=message_text,
+                chat_id=chat_id,
+                username=username
+            )
+            
+            # Enviar respuesta inteligente
+            await update.message.reply_text(ai_response, parse_mode="Markdown")
+            
+            logger.info(f"✅ AI response sent to {username}")
+            
+        except Exception as e:
+            logger.exception(f"Error generating AI response: {e}")
+            # Fallback a respuesta básica
+            await update.message.reply_text(
+                "✅ Message received. Processing your request..."
+            )
+    else:
+        # Sin IA - respuesta básica
+        await contact_system.receive_request(
+            channel=ContactChannel.TELEGRAM,
+            contact_info=chat_id,
+            description=message_text,
+            threat_type=ThreatType.OTHER
+        )
+        
+        await update.message.reply_text(
+            "✅ Message received. Processing your request..."
+        )
 
 
 def setup_telegram_bot(token: str) -> Application:
@@ -668,18 +711,55 @@ async def start_contact_system():
             telegram_app = setup_telegram_bot(contact_system.telegram_token)
             if telegram_app:
                 contact_system.telegram_bot = telegram_app.bot
-                # Iniciar bot en background
+                # Guardar telegram_app para usar después
+                contact_system.telegram_app = telegram_app
+                
+                # Iniciar bot y polling
                 await telegram_app.initialize()
                 await telegram_app.start()
-                logger.info("✅ Telegram bot started")
+                
+                # CRITICAL: Iniciar polling de updates
+                # Crear tarea de fondo que se ejecuta indefinidamente
+                async def poll_updates():
+                    """Tarea de fondo para recibir mensajes"""
+                    try:
+                        logger.info("🎧 Telegram bot polling started - listening for messages...")
+                        # Obtener updates continuamente
+                        while True:
+                            try:
+                                updates = await telegram_app.bot.get_updates(
+                                    timeout=30,
+                                    allowed_updates=["message", "edited_message"]
+                                )
+                                
+                                # Procesar cada update
+                                for update in updates:
+                                    await telegram_app.process_update(update)
+                                    # Marcar como procesado
+                                    await telegram_app.bot.get_updates(
+                                        offset=update.update_id + 1,
+                                        timeout=0
+                                    )
+                            except Exception as e:
+                                logger.error(f"Error polling Telegram updates: {e}")
+                                await asyncio.sleep(5)  # Esperar antes de reintentar
+                    except Exception as e:
+                        logger.error(f"Fatal error in Telegram polling: {e}")
+                
+                # Iniciar polling en background
+                asyncio.create_task(poll_updates())
+                
+                logger.info("✅ Telegram bot started and ACTIVELY LISTENING for messages")
         except Exception as e:
             logger.error(f"Error starting Telegram bot: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     logger.info("✅ Emergency Contact System READY")
     logger.info("")
     logger.info("📞 CONTACT CHANNELS:")
     logger.info("   • Web Form: POST /api/emergency/request")
-    logger.info(f"   • Telegram: {'✅ ACTIVE' if contact_system.telegram_bot else '⚠️ Not configured'}")
+    logger.info(f"   • Telegram: {'✅ ACTIVELY LISTENING' if contact_system.telegram_bot else '⚠️ Not configured'}")
     logger.info(f"   • Email: {contact_system.email_address}")
     logger.info(f"   • WhatsApp: {'✅ ACTIVE' if contact_system.twilio_client else '⚠️ Not configured'}")
     logger.info("")
@@ -705,8 +785,13 @@ if __name__ == "__main__":
     print("  - TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN")
     print("="*80 + "\n")
     
-    # Iniciar sistema
-    asyncio.run(start_contact_system())
+    # Iniciar sistema con bot de Telegram
+    async def startup_event():
+        """Evento de inicio para inicializar el bot"""
+        await start_contact_system()
     
-    # Iniciar FastAPI
+    # Agregar evento de startup a FastAPI
+    app.add_event_handler("startup", startup_event)
+    
+    # Iniciar FastAPI con uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8200)

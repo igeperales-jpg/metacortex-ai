@@ -6,13 +6,14 @@
 # ╚══════════════════════════════════════════════════════════════════════════╝
 #
 # USAGE:
-#   ./metacortex_master.sh start      - Iniciar todo el sistema
+#   ./metacortex_master.sh start      - Iniciar TODO el sistema (COMPLETO + IA)
 #   ./metacortex_master.sh stop       - Detener todo el sistema
 #   ./metacortex_master.sh restart    - Reiniciar el sistema completo
 #   ./metacortex_master.sh status     - Ver estado de todos los servicios
 #   ./metacortex_master.sh emergency  - Apagado de emergencia (mata todo)
 #   ./metacortex_master.sh clean      - Limpiar logs y archivos temporales
 #   ./metacortex_master.sh deploy     - Desplegar Emergency System públicamente
+#   ./metacortex_master.sh ai         - Iniciar SOLO sistemas de IA (Telegram+WhatsApp+Web)
 #
 
 set -euo pipefail
@@ -513,16 +514,289 @@ setup_ngrok_tunnel() {
 }
 
 # ============================================================================
+# FUNCIONES AUXILIARES PARA IA
+# ============================================================================
+
+verify_dependencies() {
+    print_header "🔍 VERIFICANDO DEPENDENCIAS COMPLETAS"
+    
+    local all_ok=true
+    
+    # 1. Python 3.11+
+    if command -v python3 &> /dev/null; then
+        local py_version=$(python3 --version 2>&1 | awk '{print $2}')
+        log_success "Python 3: $py_version"
+    else
+        log_error "Python 3 no encontrado"
+        all_ok=false
+    fi
+    
+    # 2. pip
+    if command -v pip3 &> /dev/null; then
+        log_success "pip3: Disponible"
+    else
+        log_error "pip3 no encontrado"
+        all_ok=false
+    fi
+    
+    # 3. Ollama
+    if command -v ollama &> /dev/null; then
+        log_success "Ollama: Instalado"
+        
+        # Verificar si está corriendo
+        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+            log_success "   Ollama Server: ACTIVO"
+        else
+            log_warning "   Ollama Server: NO ACTIVO (iniciando...)"
+            nohup ollama serve > "${LOGS_DIR}/ollama.log" 2>&1 &
+            sleep 3
+        fi
+    else
+        log_warning "Ollama no encontrado (instalando...)"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install ollama || {
+                log_error "No se pudo instalar Ollama"
+                log_info "Instala manualmente: https://ollama.com"
+                all_ok=false
+            }
+        fi
+    fi
+    
+    # 4. Entorno virtual
+    if [ -d "${PROJECT_ROOT}/.venv" ]; then
+        log_success "Entorno virtual: Encontrado"
+    else
+        log_warning "Creando entorno virtual..."
+        python3 -m venv "${PROJECT_ROOT}/.venv"
+        log_success "Entorno virtual: Creado"
+    fi
+    
+    # 5. Dependencias Python
+    log_info "Verificando dependencias Python..."
+    source "${PROJECT_ROOT}/.venv/bin/activate"
+    
+    # Instalar dependencias críticas si faltan
+    local missing_deps=false
+    
+    if ! "$VENV_PYTHON" -c "import fastapi" 2>/dev/null; then
+        missing_deps=true
+    fi
+    
+    if ! "$VENV_PYTHON" -c "import httpx" 2>/dev/null; then
+        missing_deps=true
+    fi
+    
+    if ! "$VENV_PYTHON" -c "import telegram" 2>/dev/null; then
+        missing_deps=true
+    fi
+    
+    if [ "$missing_deps" = true ]; then
+        log_warning "Instalando dependencias faltantes..."
+        "$VENV_PIP" install --upgrade pip -q
+        "$VENV_PIP" install -r "${PROJECT_ROOT}/requirements.txt" -q
+        "$VENV_PIP" install 'pydantic[email]' -q
+        log_success "Dependencias instaladas"
+    else
+        log_success "Todas las dependencias Python disponibles"
+    fi
+    
+    # 6. Modelos de Ollama
+    log_info "Verificando modelos de Ollama..."
+    local models_needed=("mistral:latest" "mistral:instruct" "mistral-nemo:latest")
+    local models_missing=false
+    
+    for model in "${models_needed[@]}"; do
+        if ollama list 2>/dev/null | grep -q "$model"; then
+            log_success "   Modelo $model: Disponible"
+        else
+            log_warning "   Modelo $model: NO DISPONIBLE (descargando...)"
+            ollama pull "$model" > /dev/null 2>&1 &
+            models_missing=true
+        fi
+    done
+    
+    if [ "$models_missing" = true ]; then
+        log_info "   Modelos descargándose en background..."
+    fi
+    
+    # 7. Archivos de configuración
+    if [ -f "${PROJECT_ROOT}/.env" ]; then
+        if grep -q "your_token_here" "${PROJECT_ROOT}/.env" 2>/dev/null; then
+            log_warning ".env necesita configuración"
+        else
+            log_success ".env: Configurado"
+        fi
+    else
+        log_warning "Creando .env de ejemplo..."
+        cat > "${PROJECT_ROOT}/.env" << 'ENVEOF'
+# Telegram Bot
+TELEGRAM_BOT_TOKEN=your_token_here
+
+# WhatsApp (Twilio)
+TWILIO_ACCOUNT_SID=your_account_sid
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
+
+# Email
+EMERGENCY_EMAIL=emergency@metacortex.ai
+EMAIL_PASSWORD=your_email_password
+
+# Sistema
+ENVIRONMENT=production
+DEBUG=false
+ENVEOF
+        log_info "   Archivo .env creado - configura tus credenciales"
+    fi
+    
+    # 8. Crear directorios
+    mkdir -p "${PROJECT_ROOT}/logs"
+    mkdir -p "${PROJECT_ROOT}/emergency_requests"
+    mkdir -p "${PROJECT_ROOT}/ml_models"
+    mkdir -p "${PROJECT_ROOT}/pid"
+    log_success "Directorios creados"
+    
+    if [ "$all_ok" = true ]; then
+        log_success "✅ Todas las dependencias verificadas"
+        return 0
+    else
+        log_error "❌ Algunas dependencias faltan"
+        return 1
+    fi
+}
+
+start_ai_systems() {
+    print_header "🧠 INICIANDO SISTEMAS DE IA COMPLETOS"
+    
+    # Verificar dependencias primero
+    verify_dependencies || return 1
+    
+    # Activar entorno
+    source "${PROJECT_ROOT}/.venv/bin/activate"
+    
+    # 1. Detener procesos previos de IA
+    log_info "Limpiando procesos previos..."
+    pkill -9 -f "python.*unified_startup.py" 2>/dev/null || true
+    pkill -9 -f "python.*emergency_contact_system.py" 2>/dev/null || true
+    sleep 2
+    
+    # 2. Limpiar logs
+    log_info "Limpiando logs antiguos..."
+    > "${LOGS_DIR}/unified_system.log" 2>/dev/null || true
+    > "${LOGS_DIR}/emergency_contact_stdout.log" 2>/dev/null || true
+    
+    # 3. Iniciar Unified System (TODO integrado)
+    log_info "Iniciando Unified System (AI Integration + Telegram + WhatsApp + Web)..."
+    log_info "   • AI Integration Layer (Ollama)"
+    log_info "   • Divine Protection System"
+    log_info "   • Emergency Contact System"
+    log_info "   • Telegram Bot (con IA)"
+    log_info "   • WhatsApp Bot"
+    log_info "   • Web Interface (puerto 8080)"
+    echo ""
+    
+    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/unified_startup.py" > "${LOGS_DIR}/unified_system.log" 2>&1 &
+    local unified_pid=$!
+    echo "$unified_pid" > "${PID_DIR}/unified_system.pid"
+    
+    log_info "⏳ Esperando inicialización (15 segundos)..."
+    sleep 15
+    
+    # 4. Verificar que está corriendo
+    if ps -p "$unified_pid" > /dev/null 2>&1; then
+        log_success "✅ Unified System ACTIVO (PID: $unified_pid)"
+        
+        # Verificar componentes
+        echo ""
+        log_info "🔍 Verificando componentes..."
+        
+        # Web Interface
+        if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+            log_success "   ✅ Web Interface: http://localhost:8080"
+        else
+            log_warning "   ⏳ Web Interface: Iniciando..."
+        fi
+        
+        # Ollama
+        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+            log_success "   ✅ Ollama LLM: http://localhost:11434"
+        else
+            log_warning "   ⏳ Ollama: Iniciando..."
+        fi
+        
+        # Emergency Contact
+        if [ -f "${LOGS_DIR}/emergency_contact_stdout.log" ]; then
+            if grep -q "Application started" "${LOGS_DIR}/emergency_contact_stdout.log" 2>/dev/null; then
+                log_success "   ✅ Emergency Contact System: ACTIVO"
+            else
+                log_warning "   ⏳ Emergency Contact: Iniciando..."
+            fi
+        fi
+        
+        echo ""
+        print_header "✅ SISTEMAS DE IA ACTIVOS"
+        
+        echo "📊 INFORMACIÓN DEL SISTEMA:"
+        echo "   • PID: $unified_pid"
+        echo "   • Web Interface: http://localhost:8080"
+        echo "   • API Status: http://localhost:8080/api/status"
+        echo "   • Logs: tail -f logs/unified_system.log"
+        echo ""
+        echo "📞 CANALES DE CONTACTO:"
+        echo "   • Telegram Bot: @metacortex_divine_bot"
+        echo "   • Web Form: http://localhost:8080"
+        echo "   • WhatsApp: (Configura Twilio en .env)"
+        echo "   • Email: emergency@metacortex.ai"
+        echo ""
+        echo "🧠 SISTEMAS ACTIVOS:"
+        echo "   • AI Integration Layer (Ollama + 956 ML models)"
+        echo "   • Divine Protection System"
+        echo "   • Emergency Contact System"
+        echo "   • Telegram Bot (con respuestas inteligentes)"
+        echo "   • WhatsApp Bot (si configurado)"
+        echo "   • Web Interface (responsive + chat)"
+        echo ""
+        echo "💡 COMANDOS ÚTILES:"
+        echo "   Ver logs:        tail -f logs/unified_system.log"
+        echo "   Estado:          ./metacortex_master.sh status"
+        echo "   Detener:         ./metacortex_master.sh stop"
+        echo "   Reiniciar:       ./metacortex_master.sh restart"
+        echo ""
+        
+        return 0
+    else
+        log_error "❌ Error al iniciar Unified System"
+        log_info "Ver logs: tail -50 logs/unified_system.log"
+        return 1
+    fi
+}
+
+# ============================================================================
 # FUNCIONES PRINCIPALES
 # ============================================================================
 start_system() {
-    print_header "🚀 INICIANDO METACORTEX - APPLE SILICON M4 + MPS"
+    print_header "🚀 INICIANDO METACORTEX COMPLETO - APPLE SILICON M4 + IA"
     
     check_venv
     
-    # 🍎 VERIFICAR APPLE SILICON M4 Y MPS
+    # ============================================================================
+    # PASO 1: INICIAR SISTEMAS DE IA (PRIORITARIO)
+    # ============================================================================
     log_info "═══════════════════════════════════════════════════════════"
-    log_info "🍎 APPLE SILICON M4 OPTIMIZATION"
+    log_info "🧠 FASE 1: SISTEMAS DE INTELIGENCIA ARTIFICIAL"
+    log_info "═══════════════════════════════════════════════════════════"
+    
+    start_ai_systems || {
+        log_error "Error iniciando sistemas de IA"
+        log_info "Continuando con sistemas base..."
+    }
+    
+    sleep 3
+    
+    # ============================================================================
+    # PASO 2: VERIFICAR APPLE SILICON M4 Y MPS
+    # ============================================================================
+    log_info "═══════════════════════════════════════════════════════════"
+    log_info "🍎 FASE 2: APPLE SILICON M4 OPTIMIZATION"
     log_info "═══════════════════════════════════════════════════════════"
     
     check_apple_silicon
@@ -541,7 +815,9 @@ start_system() {
     log_info "═══════════════════════════════════════════════════════════"
     echo ""
     
-    # 1. Verificar que NO haya procesos METACORTEX corriendo (prevenir duplicados)
+    # ============================================================================
+    # PASO 3: VERIFICAR PROCESOS EXISTENTES (ANTI-DUPLICADOS)
+    # ============================================================================
     log_info "Verificando estado previo (anti-duplicados)..."
     
     local existing_processes=$(ps aux | grep -E "python.*(metacortex_daemon.py|neural_symbiotic_network.py|web_interface/server.py|startup_orchestrator.py)" | grep -v grep | wc -l | tr -d ' ')
@@ -560,16 +836,20 @@ start_system() {
     
     log_success "✓ No hay procesos duplicados"
     
-    # 2. Limpiar archivos antiguos
+    # ============================================================================
+    # PASO 4: LIMPIAR ARCHIVOS ANTIGUOS
+    # ============================================================================
     log_info "Limpiando archivos PID/LOCK antiguos..."
     find "$PROJECT_ROOT" -name "*.pid" -type f -delete 2>/dev/null || true
     find "$PROJECT_ROOT" -name "*.lock" -type f -delete 2>/dev/null || true
     
-    # 3. Crear directorios necesarios
+    # Crear directorios necesarios
     mkdir -p "$LOGS_DIR"
     mkdir -p "$PID_DIR"
     
-    # 🍎 4. ACTIVAR PERSISTENCIA EN macOS con caffeinate (OPTIMIZADO PARA M4)
+    # ============================================================================
+    # PASO 5: ACTIVAR PERSISTENCIA macOS (CAFFEINATE)
+    # ============================================================================
     log_info "🍎 Activando persistencia optimizada para iMac M4..."
     log_info "   ✅ Caffeinate: Mantiene sistema ejecutándose 24/7"
     log_info "   ✅ GPU Metal (MPS): Aceleración de ML/AI"
@@ -580,7 +860,9 @@ start_system() {
     log_info "   ✅ Inicialización ORDENADA sin circular imports"
     log_info "   ✅ Health checks antes de continuar"
     
-    # 4. Iniciar SERVICIOS STANDALONE (ultra-ligeros, no bloquean)
+    # ============================================================================
+    # PASO 6: INICIAR SERVICIOS STANDALONE (ULTRA-LIGEROS)
+    # ============================================================================
     log_info "🚀 Iniciando servicios STANDALONE (arquitectura 3 capas)..."
     cd "$PROJECT_ROOT"
     source .venv/bin/activate
@@ -606,33 +888,16 @@ start_system() {
     echo "$telemetry_pid" > "${PID_DIR}/telemetry.pid"
     log_success "      Telemetry System STANDALONE iniciado (PID: $telemetry_pid)"
     
-    # 🚨 Emergency Contact System (puerto 8200) - CRÍTICO para protección
-    log_info "   → Emergency Contact System (puerto 8200) - SISTEMA DE VIDA O MUERTE..."
+    # Emergency Contact System STANDALONE (puerto 8200) - Sistema de emergencia
+    log_info "   → Emergency Contact System STANDALONE (puerto 8200)..."
     nohup "$VENV_PYTHON" "${PROJECT_ROOT}/metacortex_sinaptico/emergency_contact_system.py" > "${LOGS_DIR}/emergency_contact_stdout.log" 2>&1 &
     local emergency_pid=$!
     echo "$emergency_pid" > "${PID_DIR}/emergency_contact.pid"
-    log_success "      Emergency Contact System iniciado (PID: $emergency_pid)"
-    
-    # 🤖 Ollama LLM Server (puerto 11434) - CRÍTICO para agentes
-    log_info "   → Verificando Ollama (puerto 11434)..."
-    if lsof -i:11434 -sTCP:LISTEN > /dev/null 2>&1; then
-        log_success "      Ollama ya está corriendo"
-    else
-        log_info "      Iniciando Ollama en background..."
-        if command -v ollama &> /dev/null; then
-            nohup ollama serve > "${LOGS_DIR}/ollama.log" 2>&1 &
-            local ollama_pid=$!
-            echo "$ollama_pid" > "${PID_DIR}/ollama.pid"
-            log_success "      Ollama iniciado (PID: $ollama_pid)"
-            sleep 2  # Dar tiempo a Ollama para iniciar
-        else
-            log_warning "      ⚠️ Ollama no está instalado (brew install ollama)"
-        fi
-    fi
+    log_success "      Emergency Contact System STANDALONE iniciado (PID: $emergency_pid)"
     
     # Esperar 3 segundos para que los servicios standalone inicien (ultra-rápido)
-    log_info "   ⏳ Esperando servicios standalone (3s - arquitectura ligera)..."
-    sleep 3
+    log_info "   ⏳ Esperando servicios standalone (5s - incluyendo Emergency Contact)..."
+    sleep 5
     
     # Verificar que están corriendo
     if ps -p "$web_interface_pid" > /dev/null 2>&1; then
@@ -653,23 +918,15 @@ start_system() {
         log_warning "   ⚠️ Telemetry System: NO ACTIVO (ver logs/telemetry.log)"
     fi
     
-    # Verificar Emergency Contact System
     if ps -p "$emergency_pid" > /dev/null 2>&1; then
-        log_success "   ✅ Emergency Contact System: ACTIVO (PID: $emergency_pid)"
-        log_info "      🌐 Portal web: http://localhost:8200"
-        log_info "      🚨 Endpoint de emergencia: POST http://localhost:8200/emergency"
+        log_success "   ✅ Emergency Contact System: ACTIVO (PID: $emergency_pid, Puerto 8200)"
     else
-        log_warning "   ⚠️ Emergency Contact System: NO ACTIVO (ver logs/emergency_contact.log)"
+        log_warning "   ⚠️ Emergency Contact System: NO ACTIVO (ver logs/emergency_contact_stdout.log)"
     fi
     
-    # Verificar Ollama
-    if lsof -i:11434 -sTCP:LISTEN > /dev/null 2>&1; then
-        log_success "   ✅ Ollama: ACTIVO (puerto 11434)"
-    else
-        log_warning "   ⚠️ Ollama: NO ACTIVO (ver logs/ollama.log)"
-    fi
-    
-    # 5. Iniciar DAEMON MILITAR (24/7 persistence) - CON MPS FORZADO
+    # ============================================================================
+    # PASO 7: INICIAR DAEMON MILITAR (24/7 PERSISTENCE) - CON MPS FORZADO
+    # ============================================================================
     log_info "Iniciando METACORTEX Military Daemon (Apple Silicon M4 + MPS)..."
     cd "$PROJECT_ROOT"
     source .venv/bin/activate
@@ -701,7 +958,9 @@ start_system() {
     
     sleep 3
     
-    # 6. Iniciar ORCHESTRATOR (coordinador de agentes) - CON MPS
+    # ============================================================================
+    # PASO 8: INICIAR ORCHESTRATOR (COORDINADOR DE AGENTES) - CON MPS
+    # ============================================================================
     log_info "Iniciando METACORTEX Agent Orchestrator (Apple Silicon M4)..."
     
     # Mantener variables MPS para orchestrator
@@ -709,12 +968,6 @@ start_system() {
     export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
     export MPS_FORCE_ENABLE=1
     
-    # Usar el Startup Orchestrator que garantiza:
-    # - Orden correcto de inicialización (5 fases)
-    # - No circular imports
-    # - Health checks de cada servicio
-    # - Retry logic con backoff
-    # - TODO está activo antes de continuar
     nohup caffeinate -i "$VENV_PYTHON" "$STARTUP_ORCHESTRATOR" > "${LOGS_DIR}/startup_orchestrator.log" 2>&1 &
     local orchestrator_pid=$!
     
@@ -726,10 +979,13 @@ start_system() {
     log_info "   ✅ Garantía: TODOS los servicios activos"
     log_info "   ✅ Health checks: ANTES DE CONTINUAR"
     
-    # 6. Monitorear el startup (ver logs en tiempo real)
+    # ============================================================================
+    # PASO 9: MONITOREAR EL STARTUP (VER LOGS EN TIEMPO REAL)
+    # ============================================================================
     log_info "Monitoreando inicialización..."
     log_info "   Daemon logs: tail -f ${LOGS_DIR}/metacortex_daemon_military.log"
     log_info "   Orchestrator logs: tail -f ${LOGS_DIR}/startup_orchestrator.log"
+    log_info "   AI Systems logs: tail -f ${LOGS_DIR}/unified_system.log"
     
     sleep 3
     
@@ -739,11 +995,14 @@ start_system() {
         tail -20 "${LOGS_DIR}/metacortex_daemon_military.log"
     fi
     
-    # 7. Verificar que ambos procesos sigan corriendo
+    # ============================================================================
+    # PASO 10: VERIFICAR QUE TODOS LOS PROCESOS SIGAN CORRIENDO
+    # ============================================================================
     sleep 5
     
     local daemon_running=false
     local orchestrator_running=false
+    local ai_running=false
     
     if ps -p "$daemon_pid" > /dev/null 2>&1; then
         daemon_running=true
@@ -760,25 +1019,38 @@ start_system() {
         log_warning "Orchestrator completó su ciclo (esto es normal)"
     fi
     
-    # 8. Verificación final
+    # Verificar sistemas de IA
+    if [ -f "${PID_DIR}/unified_system.pid" ]; then
+        local ai_pid=$(cat "${PID_DIR}/unified_system.pid")
+        if ps -p "$ai_pid" > /dev/null 2>&1; then
+            ai_running=true
+            log_success "Unified AI System CORRIENDO (PID: $ai_pid)"
+        fi
+    fi
+    
+    # ============================================================================
+    # PASO 11: VERIFICACIÓN FINAL
+    # ============================================================================
     if [ "$daemon_running" = true ]; then
         log_info "   Todos los servicios en proceso de inicialización ordenada"
         log_info "   Daemon permanecerá activo 24/7 con health monitoring"
         
-        # 9. Esperar a que complete la inicialización (dar tiempo)
+        # Esperar a que complete la inicialización (dar tiempo)
         log_info "Esperando finalización de startup (puede tomar 1-2 minutos)..."
         sleep 10
         
-        # 10. Verificar servicios finales
+        # Verificar servicios finales
         log_info "Verificando servicios finales..."
         show_status
         
-        print_header "✅ METACORTEX OPERACIONAL - APPLE SILICON M4 + MPS 🍎"
+        print_header "✅ METACORTEX OPERACIONAL - COMPLETO CON IA 🧠"
         log_info "   💡 Daemon logs: tail -f ${LOGS_DIR}/metacortex_daemon_military.log"
         log_info "   💡 Orchestrator logs: tail -f ${LOGS_DIR}/startup_orchestrator.log"
+        log_info "   💡 AI Systems logs: tail -f ${LOGS_DIR}/unified_system.log"
         log_info "   🎮 GPU Metal (MPS): ACTIVO para aceleración ML/AI"
         log_info "   🍎 iMac M4: Optimizado para 24/7 con caffeinate"
         log_info "   ⚡ Unified Memory: Compartida entre CPU y GPU"
+        log_info "   🧠 AI Integration: Telegram + WhatsApp + Web con IA"
     else
         log_error "Error crítico: Daemon no está corriendo"
         log_info "Ver logs en: ${LOGS_DIR}/metacortex_daemon_military.log"
@@ -787,10 +1059,25 @@ start_system() {
 }
 
 stop_system() {
-    print_header "🛑 DETENIENDO METACORTEX"
+    print_header "🛑 DETENIENDO METACORTEX COMPLETO (BASE + IA)"
     
-    # 0. PRIMERO: Matar TODOS los procesos relacionados (incluye duplicados)
-    # IMPORTANTE: NO matar procesos bash (incluyendo este script)
+    # ============================================================================
+    # PASO 1: DETENER SISTEMAS DE IA PRIMERO
+    # ============================================================================
+    log_info "Deteniendo sistemas de IA..."
+    pkill -9 -f "python.*unified_startup.py" 2>/dev/null || true
+    pkill -9 -f "python.*emergency_contact_system.py" 2>/dev/null || true
+    
+    # Limpiar PID del sistema unificado
+    if [ -f "${PID_DIR}/unified_system.pid" ]; then
+        rm -f "${PID_DIR}/unified_system.pid"
+    fi
+    
+    sleep 2
+    
+    # ============================================================================
+    # PASO 2: DETENER TODOS LOS PROCESOS METACORTEX (INCLUYE DUPLICADOS)
+    # ============================================================================
     log_info "Deteniendo TODOS los procesos METACORTEX (incluye duplicados)..."
     
     # Matar procesos específicos de METACORTEX (Python únicamente, NO bash)
@@ -807,7 +1094,6 @@ stop_system() {
     pkill -9 -f "python.*web_interface/server.py" 2>/dev/null || true
     pkill -9 -f "python.*orchestrator.py" 2>/dev/null || true
     pkill -9 -f "python.*ml_pipeline.py" 2>/dev/null || true
-    pkill -9 -f "python.*emergency_contact_system.py" 2>/dev/null || true
     
     # Detener Ollama si fue iniciado por METACORTEX
     if [ -f "${PID_DIR}/ollama.pid" ]; then
@@ -821,7 +1107,9 @@ stop_system() {
     
     sleep 2
     
-    # 1. Detener caffeinate (wrapper) - DESPUÉS de matar procesos hijo
+    # ============================================================================
+    # PASO 3: DETENER CAFFEINATE (WRAPPER) - DESPUÉS DE MATAR PROCESOS HIJO
+    # ============================================================================
     local caffeinate_pid_file="${PROJECT_ROOT}/caffeinate.pid"
     if [ -f "$caffeinate_pid_file" ]; then
         local caffeine_pid=$(cat "$caffeinate_pid_file")
@@ -834,7 +1122,7 @@ stop_system() {
         rm -f "$caffeinate_pid_file" 2>/dev/null || true
     fi
     
-    # 2. Matar cualquier caffeinate relacionado con METACORTEX que quedó huérfano
+    # Matar cualquier caffeinate relacionado con METACORTEX que quedó huérfano
     for pid in $(pgrep -f "caffeinate.*metacortex_daemon.py" 2>/dev/null || true); do
         if ps -p "$pid" > /dev/null 2>&1; then
             log_info "Deteniendo caffeinate huérfano (PID: $pid)..."
@@ -842,33 +1130,39 @@ stop_system() {
         fi
     done
     
-    # 3. Verificar que NO queden procesos Python de METACORTEX
+    # ============================================================================
+    # PASO 4: VERIFICAR QUE NO QUEDEN PROCESOS PYTHON DE METACORTEX
+    # ============================================================================
     log_info "Verificando que no queden procesos..."
-    local remaining=$(ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server)" | grep -v grep | wc -l | tr -d ' ')
+    local remaining=$(ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact)" | grep -v grep | wc -l | tr -d ' ')
     
     if [ "$remaining" -gt 0 ]; then
         log_warning "Quedan $remaining procesos, limpiando..."
-        ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server)" | grep -v grep | awk '{print $2}' | xargs -I {} kill -9 {} 2>/dev/null || true
+        ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact)" | grep -v grep | awk '{print $2}' | xargs -I {} kill -9 {} 2>/dev/null || true
         sleep 1
     fi
     
-    # 4. Limpiar archivos temporales y PID
+    # ============================================================================
+    # PASO 5: LIMPIAR ARCHIVOS TEMPORALES Y PID
+    # ============================================================================
     log_info "Limpiando archivos temporales..."
     find "$PROJECT_ROOT" -name "*.pid" -type f -delete 2>/dev/null || true
     find "$PROJECT_ROOT" -name "*.lock" -type f -delete 2>/dev/null || true
     rm -f "$DAEMON_PID_FILE" 2>/dev/null || true
     
-    # 5. Verificación final
-    local final_count=$(ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server)" | grep -v grep | wc -l | tr -d ' ')
+    # ============================================================================
+    # PASO 6: VERIFICACIÓN FINAL
+    # ============================================================================
+    local final_count=$(ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact)" | grep -v grep | wc -l | tr -d ' ')
     if [ "$final_count" -eq 0 ]; then
-        log_success "Todos los procesos METACORTEX detenidos (0 procesos restantes)"
+        log_success "Todos los procesos METACORTEX (BASE + IA) detenidos (0 procesos restantes)"
     else
         log_error "Aún quedan $final_count procesos activos"
-        ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server)" | grep -v grep
+        ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact)" | grep -v grep
     fi
     
     log_success "Persistencia macOS desactivada"
-    print_header "✅ METACORTEX DETENIDO - SIN PROCESOS DUPLICADOS"
+    print_header "✅ METACORTEX COMPLETO DETENIDO - SIN PROCESOS DUPLICADOS"
 }
 
 emergency_shutdown() {
@@ -940,26 +1234,26 @@ show_status() {
     # 2. Procesos relacionados
     echo -e "${BOLD}Procesos Relacionados:${RESET}"
     
-    # Buscar nuevos scripts standalone (v2025-11-14)
-    local neural_count=$(pgrep -f "start_neural_network_standalone.py" 2>/dev/null | wc -l | tr -d ' ')
+    # Buscar servicios standalone CORRECTOS (iniciados por start_system)
+    local neural_count=$(pgrep -f "neural_network_service/server.py" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$neural_count" -gt 0 ]; then
-        local neural_pid=$(pgrep -f "start_neural_network_standalone.py" 2>/dev/null | head -1)
-        echo -e "   ${GREEN}●${RESET} Neural Network: Activo (PID: $neural_pid)"
+        local neural_pid=$(pgrep -f "neural_network_service/server.py" 2>/dev/null | head -1)
+        echo -e "   ${GREEN}●${RESET} Neural Network: Activo (PID: $neural_pid, Puerto 8001)"
     else
         echo -e "   ${RED}●${RESET} Neural Network: No activo"
     fi
     
-    local web_count=$(pgrep -f "start_web_interface_standalone.py" 2>/dev/null | wc -l | tr -d ' ')
+    local web_count=$(pgrep -f "web_interface/server.py" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$web_count" -gt 0 ]; then
-        local web_pid=$(pgrep -f "start_web_interface_standalone.py" 2>/dev/null | head -1)
+        local web_pid=$(pgrep -f "web_interface/server.py" 2>/dev/null | head -1)
         echo -e "   ${GREEN}●${RESET} Web Interface: Activo (PID: $web_pid, Puerto 8000)"
     else
         echo -e "   ${RED}●${RESET} Web Interface: No activo"
     fi
     
-    local telemetry_count=$(pgrep -f "start_telemetry_simple.py" 2>/dev/null | wc -l | tr -d ' ')
+    local telemetry_count=$(pgrep -f "telemetry_service/server.py" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$telemetry_count" -gt 0 ]; then
-        local telemetry_pid=$(pgrep -f "start_telemetry_simple.py" 2>/dev/null | head -1)
+        local telemetry_pid=$(pgrep -f "telemetry_service/server.py" 2>/dev/null | head -1)
         echo -e "   ${GREEN}●${RESET} Telemetry System: Activo (PID: $telemetry_pid, Puerto 9090)"
     else
         echo -e "   ${RED}●${RESET} Telemetry System: No activo"
@@ -1106,15 +1400,23 @@ show_help() {
 ╔══════════════════════════════════════════════════════════════════════════╗
 ║  ⚔️  METACORTEX MASTER CONTROL v5.0                                      ║
 ║  Control centralizado de todos los servicios METACORTEX                  ║
-║  🍎 CON PERSISTENCIA EN macOS (caffeinate)                              ║
+║  🍎 CON PERSISTENCIA EN macOS (caffeinate) + 🧠 IA INTEGRATION          ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 
 COMANDOS DISPONIBLES:
 
-  start              Iniciar todo el sistema METACORTEX con persistencia
+  start              Iniciar todo el sistema METACORTEX COMPLETO
                      • Activa caffeinate para prevenir sleep
+                     • Sistemas de IA (Telegram + WhatsApp + Web)
+                     • Daemon + Orchestrator + ML Pipeline
                      • Sistema ejecutándose 24/7 en iMac
-                     • Todos los componentes iniciados automáticamente
+  
+  ai                 🧠 Iniciar SOLO sistemas de Inteligencia Artificial
+                     • AI Integration Layer (Ollama LLM)
+                     • Telegram Bot (con IA)
+                     • WhatsApp Bot (Twilio)
+                     • Web Interface (puerto 8080)
+                     • Emergency Contact System (con IA)
   
   stop               Detener todo el sistema de forma ordenada
                      • Desactiva caffeinate
@@ -1133,6 +1435,15 @@ COMANDOS DISPONIBLES:
   divine             Abrir interfaz Divine Protection System
   help               Mostrar esta ayuda
 
+🧠 SISTEMAS DE IA (comando 'ai'):
+   ✓ Ollama LLM                  - Modelos: mistral-nemo, mistral:instruct
+   ✓ ML Models Manager           - 956+ modelos entrenados
+   ✓ Telegram Bot (@metacortex_divine_bot) - Respuestas inteligentes
+   ✓ WhatsApp Bot                - Integración con Twilio
+   ✓ Web Interface               - Chat en tiempo real (puerto 8080)
+   ✓ Emergency Contact System    - Análisis de amenazas con IA
+   ✓ Divine Protection System    - Activación automática de protección
+
 🍎 PERSISTENCIA EN macOS:
    El sistema usa 'caffeinate' de Apple para prevenir sleep:
    • -d: Previene disk sleep
@@ -1140,7 +1451,7 @@ COMANDOS DISPONIBLES:
    • -m: Previene system sleep (aggressive)
    • -s: Previene sleep cuando está conectado a AC
 
-📦 COMPONENTES ACTIVADOS AUTOMÁTICAMENTE:
+📦 COMPONENTES BASE (comando 'start'):
    ✓ metacortex_daemon.py       - Orquestador principal
    ✓ metacortex_orchestrator.py - Coordinador de agentes
    ✓ ml_pipeline.py              - Pipeline de Machine Learning
@@ -1151,7 +1462,10 @@ COMANDOS DISPONIBLES:
 
 EJEMPLOS:
 
-  # Iniciar el sistema con persistencia
+  # Iniciar SOLO sistemas de IA (recomendado para testing)
+  ./metacortex_master.sh ai
+
+  # Iniciar el sistema COMPLETO con persistencia
   ./metacortex_master.sh start
 
   # Ver estado
@@ -1180,6 +1494,9 @@ main() {
     case "$command" in
         start)
             start_system
+            ;;
+        ai)
+            start_ai_systems
             ;;
         stop)
             stop_system
