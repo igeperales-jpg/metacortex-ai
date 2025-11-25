@@ -607,15 +607,33 @@ verify_dependencies() {
     if ! pgrep -f "ollama serve" > /dev/null 2>&1; then
         log_warning "   Servidor Ollama NO está corriendo. Iniciando..."
         ollama serve > /dev/null 2>&1 &
-        sleep 3  # Esperar a que inicie
+        local ollama_pid=$!
+        echo "$ollama_pid" > "${PID_DIR}/ollama.pid"
+        sleep 5  # Esperar 5 segundos (era 3, muy poco)
+        log_success "   Ollama iniciado (PID: $ollama_pid)"
     fi
     
     # Verificar conexión a Ollama con timeout
-    if ! timeout 5 ollama list > /dev/null 2>&1; then
-        log_error "   No se puede conectar al servidor Ollama"
-        log_info "   Intenta reiniciar Ollama manualmente: ollama serve"
-        return 1
-    fi
+    log_info "   Verificando conexión a Ollama..."
+    local retry_count=0
+    local max_retries=5
+    
+    while [ $retry_count -lt $max_retries ]; do
+        if timeout 5 ollama list > /dev/null 2>&1; then
+            log_success "   ✅ Conexión a Ollama establecida"
+            break
+        else
+            retry_count=$((retry_count + 1))
+            if [ $retry_count -lt $max_retries ]; then
+                log_warning "   ⚠️  Intento $retry_count/$max_retries - Esperando 2s..."
+                sleep 2
+            else
+                log_error "   ❌ No se puede conectar al servidor Ollama después de $max_retries intentos"
+                log_info "   Intenta reiniciar Ollama manualmente: ollama serve"
+                return 1
+            fi
+        fi
+    done
     
     local models_needed=("mistral:latest" "mistral:instruct" "mistral-nemo:latest")
     local models_missing=false
@@ -950,11 +968,9 @@ start_system() {
         log_warning "   ⚠️ Telemetry System: NO ACTIVO (ver logs/telemetry.log)"
     fi
     
-    if ps -p "$emergency_pid" > /dev/null 2>&1; then
-        log_success "   ✅ Emergency Contact System: ACTIVO (PID: $emergency_pid, Puerto 8200)"
-    else
-        log_warning "   ⚠️ Emergency Contact System: NO ACTIVO (ver logs/emergency_contact_stdout.log)"
-    fi
+    # Emergency Contact System ya NO se inicia standalone (integrado en unified_startup.py)
+    # No verificar emergency_pid porque no existe
+    log_success "   ✅ Emergency Contact System: Integrado en Unified System (puerto 8080)"
     
     if ps -p "$api_monetization_pid" > /dev/null 2>&1; then
         log_success "   ✅ API Monetization Server: ACTIVO (PID: $api_monetization_pid, Puerto 8100)"
