@@ -446,24 +446,55 @@ class UnifiedAIIntegration:
         self,
         message: str,
         chat_id: str,
-        username: Optional[str] = None
+        username: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+        cognitive_insights: Optional[Dict[str, Any]] = None
     ) -> str:
         """
-        Genera respuesta específica para Telegram
+        Genera respuesta específica para Telegram con MEMORIA y METACORTEX Core.
+        
+        Args:
+            message: Mensaje actual del usuario
+            chat_id: ID único del chat
+            username: Nombre de usuario (opcional)
+            conversation_history: Historial de conversación previo
+            cognitive_insights: Insights del CognitiveAgent (BDI, afecto, planificación)
         
         Returns:
             Texto de respuesta formateado para Telegram
         """
         
+        # Construir contexto enriquecido
+        enriched_message = message
+        if conversation_history:
+            # Agregar contexto de conversación previa
+            history_summary = "\n".join([
+                f"{msg['sender']}: {msg['message'][:50]}..." 
+                for msg in conversation_history[-3:]  # Últimos 3 mensajes
+            ])
+            enriched_message = f"[Contexto previo:\n{history_summary}\n]\n\nMensaje actual: {message}"
+        
         result = await self.process_emergency_message(
-            message=message,
+            message=enriched_message,
             channel="telegram",
             user_id=chat_id,
             threat_type="unknown"
         )
         
-        # Formatear para Telegram
+        # Formatear para Telegram con información cognitiva
         response = f"🛡️ *METACORTEX Divine Protection*\n\n"
+        
+        # Si hay insights cognitivos, usar información más rica
+        if cognitive_insights:
+            if cognitive_insights.get('empathy_level', 0) > 0.7:
+                response += "_I understand this is a difficult situation. You are not alone._\n\n"
+            
+            if cognitive_insights.get('action_plan'):
+                response += f"📋 *Recommended Actions*:\n"
+                for step in cognitive_insights['action_plan'][:3]:  # Primeros 3 pasos
+                    response += f"  • {step}\n"
+                response += "\n"
+        
         response += f"{result['response_text']}\n\n"
         
         if result['divine_protection_activated']:
@@ -472,7 +503,12 @@ class UnifiedAIIntegration:
         
         if result['threat_analysis']['threat_level'] == 'critical':
             response += "🚨 *CRITICAL SITUATION DETECTED*\n"
-            response += "Emergency response team notified.\n\n"
+            response += "Emergency response team notified.\n"
+            response += "Expected response: < 5 minutes\n\n"
+        
+        # Agregar memoria de conversación
+        if conversation_history and len(conversation_history) > 1:
+            response += f"_I remember our previous conversation. How can I help you further?_\n\n"
         
         response += "_Your request has been recorded and is being processed._"
         

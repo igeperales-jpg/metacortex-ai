@@ -198,12 +198,19 @@ class EmergencyContactSystem:
     
     Permite recibir solicitudes por múltiples canales y gestionar
     respuestas de forma rápida y segura.
+    
+    **NUEVO**: Ahora con memoria persistente y integración completa con METACORTEX Core.
     """
     
     def __init__(self, project_root: Path = Path.cwd()):
         self.project_root = project_root
         self.requests_dir = project_root / "emergency_requests"
         self.requests_dir.mkdir(exist_ok=True, parents=True)
+        
+        # 🧠 MEMORIA PERSISTENTE DE USUARIOS (nuevo)
+        self.user_profiles_dir = project_root / "user_profiles"
+        self.user_profiles_dir.mkdir(exist_ok=True, parents=True)
+        self.user_profiles_cache: Dict[str, Dict[str, Any]] = {}
         
         # AI Integration Layer - DEBE SER PRIMERO
         if AI_INTEGRATION_AVAILABLE:
@@ -512,6 +519,115 @@ class EmergencyContactSystem:
                 "whatsapp": bool(self.twilio_client)
             }
         }
+    
+    # ========================================================================
+    # 🧠 MEMORIA PERSISTENTE DE USUARIOS (NUEVO)
+    # ========================================================================
+    
+    async def _get_or_create_user_profile(
+        self, 
+        chat_id: str, 
+        username: str = "Anonymous"
+    ) -> Dict[str, Any]:
+        """
+        Obtiene o crea perfil persistente de usuario.
+        
+        Esto permite que el sistema RECUERDE conversaciones previas,
+        nivel de urgencia, historial de solicitudes, etc.
+        
+        Args:
+            chat_id: ID único del usuario (Telegram chat_id)
+            username: Nombre de usuario (opcional)
+        
+        Returns:
+            Diccionario con perfil completo del usuario
+        """
+        # Verificar si está en caché
+        if chat_id in self.user_profiles_cache:
+            return self.user_profiles_cache[chat_id]
+        
+        # Buscar archivo de perfil
+        profile_file = self.user_profiles_dir / f"{chat_id}.json"
+        
+        if profile_file.exists():
+            # Cargar perfil existente
+            with open(profile_file, 'r') as f:
+                profile = json.load(f)
+            logger.info(f"📂 Perfil cargado para {username} ({chat_id})")
+        else:
+            # Crear nuevo perfil
+            profile = {
+                'chat_id': chat_id,
+                'username': username,
+                'created_at': datetime.now().isoformat(),
+                'last_contact': datetime.now().isoformat(),
+                'message_history': [],
+                'request_count': 0,
+                'urgency_level': 0.5,  # 0.0 = normal, 1.0 = crítico
+                'threat_level': 'unknown',
+                'location_history': [],
+                'notes': [],
+                'resolved_requests': [],
+                'active_request_id': None,
+                'language_preference': 'auto',
+                'trust_score': 1.0,  # Confianza inicial
+                'verification_status': 'unverified'
+            }
+            logger.info(f"✨ Nuevo perfil creado para {username} ({chat_id})")
+        
+        # Actualizar timestamp de último contacto
+        profile['last_contact'] = datetime.now().isoformat()
+        
+        # Guardar en caché
+        self.user_profiles_cache[chat_id] = profile
+        
+        return profile
+    
+    async def _save_user_profile(self, chat_id: str, profile: Dict[str, Any]) -> None:
+        """
+        Guarda perfil de usuario en disco.
+        
+        Esto asegura persistencia entre reinicios del sistema.
+        """
+        profile_file = self.user_profiles_dir / f"{chat_id}.json"
+        
+        with open(profile_file, 'w') as f:
+            json.dump(profile, f, indent=2, ensure_ascii=False)
+        
+        # Actualizar caché
+        self.user_profiles_cache[chat_id] = profile
+        
+        logger.debug(f"💾 Perfil guardado para {chat_id}")
+    
+    async def _get_conversation_context(
+        self, 
+        chat_id: str, 
+        last_n_messages: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtiene contexto de conversación reciente.
+        
+        Returns:
+            Lista de últimos N mensajes de la conversación
+        """
+        profile = await self._get_or_create_user_profile(chat_id)
+        return profile['message_history'][-last_n_messages:]
+    
+    async def _update_urgency_level(
+        self, 
+        chat_id: str, 
+        urgency: float
+    ) -> None:
+        """
+        Actualiza nivel de urgencia del usuario.
+        
+        Args:
+            chat_id: ID del usuario
+            urgency: Nivel de urgencia (0.0 a 1.0)
+        """
+        profile = await self._get_or_create_user_profile(chat_id)
+        profile['urgency_level'] = max(profile['urgency_level'], urgency)
+        await self._save_user_profile(chat_id, profile)
 
 
 # ============================================================================
@@ -638,36 +754,96 @@ async def telegram_help_command(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def telegram_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler para mensajes del bot - AHORA CON IA"""
+    """
+    Handler para mensajes del bot - CON MEMORIA PERSISTENTE Y METACORTEX CORE
+    
+    Este handler ahora:
+    1. Mantiene memoria de conversaciones (mismo chat_id = mismo contexto)
+    2. Usa CognitiveAgent completo con BDI, afecto, planificación
+    3. Responde inteligentemente basándose en historial
+    """
     chat_id = str(update.effective_chat.id)
     username = update.effective_user.username or "Anonymous"
     message_text = update.message.text
     
     logger.info(f"📨 Telegram message from {username} ({chat_id}): {message_text[:100]}")
     
-    # USAR IA PARA GENERAR RESPUESTA INTELIGENTE
-    if contact_system.ai:
+    # 🧠 INTEGRACIÓN COMPLETA CON METACORTEX CORE
+    if contact_system.ai and hasattr(contact_system.ai, 'cognitive_agent'):
         try:
-            # Generar respuesta con IA
-            ai_response = await contact_system.ai.generate_telegram_response(
-                message=message_text,
+            # Obtener o crear perfil de usuario con MEMORIA PERSISTENTE
+            user_profile = await contact_system._get_or_create_user_profile(
                 chat_id=chat_id,
                 username=username
             )
             
+            # Agregar mensaje actual al historial
+            user_profile['message_history'].append({
+                'timestamp': datetime.now().isoformat(),
+                'message': message_text,
+                'sender': 'user'
+            })
+            
+            # 🔥 USAR COGNITIVE AGENT (METACORTEX CORE) COMPLETO
+            cognitive_agent = contact_system.ai.cognitive_agent
+            
+            # Registrar percepción en el agente
+            cognitive_agent.perceive({
+                'type': 'emergency_message',
+                'chat_id': chat_id,
+                'username': username,
+                'message': message_text,
+                'conversation_history': user_profile['message_history'][-10:],  # Últimos 10 mensajes
+                'urgency_score': user_profile.get('urgency_level', 0.5),
+                'previous_requests': user_profile.get('request_count', 0)
+            })
+            
+            # El agente procesa y genera respuesta con TODO su poder cognitivo
+            # (BDI, afecto, planificación, memoria, metacognición)
+            cognitive_response = cognitive_agent.think_and_respond({
+                'context': 'emergency_assistance',
+                'user_state': user_profile,
+                'current_message': message_text,
+                'requires_empathy': True,
+                'requires_action_plan': True
+            })
+            
+            # Generar respuesta con IA usando contexto completo
+            ai_response = await contact_system.ai.generate_telegram_response(
+                message=message_text,
+                chat_id=chat_id,
+                username=username,
+                conversation_history=user_profile['message_history'][-5:],  # Últimos 5 para contexto
+                cognitive_insights=cognitive_response
+            )
+            
+            # Agregar respuesta al historial
+            user_profile['message_history'].append({
+                'timestamp': datetime.now().isoformat(),
+                'message': ai_response,
+                'sender': 'bot'
+            })
+            
+            # Actualizar urgencia basándose en análisis cognitivo
+            if 'urgency_detected' in cognitive_response:
+                user_profile['urgency_level'] = cognitive_response['urgency_detected']
+            
+            # Guardar perfil actualizado
+            await contact_system._save_user_profile(chat_id, user_profile)
+            
             # Enviar respuesta inteligente
             await update.message.reply_text(ai_response, parse_mode="Markdown")
             
-            logger.info(f"✅ AI response sent to {username}")
+            logger.info(f"✅ AI response sent to {username} (usando METACORTEX Core completo)")
             
         except Exception as e:
-            logger.exception(f"Error generating AI response: {e}")
+            logger.exception(f"Error en procesamiento cognitivo: {e}")
             # Fallback a respuesta básica
             await update.message.reply_text(
-                "✅ Message received. Processing your request..."
+                "✅ Message received. Processing your request with advanced AI..."
             )
     else:
-        # Sin IA - respuesta básica
+        # Sin IA - respuesta básica (no debería llegar aquí)
         await contact_system.receive_request(
             channel=ContactChannel.TELEGRAM,
             contact_info=chat_id,
