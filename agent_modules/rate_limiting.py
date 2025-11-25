@@ -1,39 +1,40 @@
+from redis_connection_pool import get_redis_client
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""
+🚦 RATE LIMITING MODULE - Control de tráfico adaptativo (Military Grade)
 
-import sys
-from pathlib import Path
+Características:
+    pass  # TODO: Implementar
+- Token Bucket Algorithm
+- Leaky Bucket Algorithm
+- Sliding Window Rate Limiting
+- Per-user/per-service limits
+- Adaptive Rate Limiting basado en carga del sistema
+- Redis-backed distributed rate limiting
+- Rate limit headers (X-RateLimit-*)
+- Graceful degradation
+- Circuit breaker integration
+"""
+
 import time
 import logging
 import threading
-from typing import Dict, Optional, Tuple, Any, Deque, Callable
+from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass
 from collections import deque
 from enum import Enum
 import traceback
+import traceback
 
-# Solución para el problema de importación relativa cuando se carga dinámicamente
-# Añadir el directorio padre ('agent_modules') a sys.path
-sys.path.append(str(Path(__file__).parent))
-
-from redis_connection_pool import get_redis_client
-
-"""
-Advanced Rate Limiting System v2.1
-"""
-
-# Configuración del logger
 logger = logging.getLogger(__name__)
 
 # Redis opcional
 try:
     import redis
-    from redis.exceptions import ConnectionError as RedisConnectionError
-    redis_available = True
+
+    REDIS_AVAILABLE = True
 except ImportError:
-    redis = None # type: ignore
-    RedisConnectionError = Exception # type: ignore
-    redis_available = False
+    REDIS_AVAILABLE = False
     logger.warning("⚠️ Redis no disponible - usando rate limiting local")
 
 
@@ -168,7 +169,7 @@ class SlidingWindowCounter:
     def __init__(self, max_requests: int, window_seconds: float):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        self.requests: Deque[float] = deque()
+        self.requests: deque = deque()
         self.lock = threading.Lock()
 
     def _cleanup_old_requests(self):
@@ -215,7 +216,7 @@ class AdaptiveRateLimiter:
         self.lock = threading.Lock()
 
         # Métricas del sistema
-        self.system_load_history: Deque[Tuple[float, float]] = deque(maxlen=60)  # Últimos 60 segundos
+        self.system_load_history: deque = deque(maxlen=60)  # Últimos 60 segundos
 
         # Thresholds
         self.high_load_threshold = 0.8  # 80% de carga
@@ -283,13 +284,12 @@ class RateLimitSystem:
         self.limiters: Dict[str, Any] = {}
         self.configs: Dict[str, RateLimitConfig] = {}
         self.adaptive_limiters: Dict[str, AdaptiveRateLimiter] = {}
-        self.telemetry: Optional[Any] = None # Tipo explícito para telemetría
 
         self.lock = threading.RLock()
 
         # Redis para rate limiting distribuido (usando CONNECTION POOL)
-        self.redis_client: Optional[Any] = None
-        if redis_host and redis_available and redis:
+        self.redis_client: Optional[redis.Redis] = None
+        if redis_host and REDIS_AVAILABLE:
             try:
                 # CRITICAL: Usar connection pool para prevenir leaks
                 
@@ -317,7 +317,7 @@ class RateLimitSystem:
                     socket_connect_timeout=10,
                     socket_timeout=10,
                 )
-            except RedisConnectionError as e:
+            except redis.ConnectionError as e:
                 logger.error(f"❌ Redis ConnectionError: {e}")
 
                 logger.error(f"   Traceback: {traceback.format_exc()}")
@@ -331,7 +331,7 @@ class RateLimitSystem:
         self.enable_adaptive = enable_adaptive
 
         # 🧠 Conexión a red neuronal (FASE 1: Declaración)
-        self.neural_network: Optional[Any] = None
+        self.neural_network = None
         self._neural_ready = False
         logger.debug("🧠 Neural network: declarado, registro diferido")
 
@@ -411,7 +411,6 @@ class RateLimitSystem:
             config = self.adaptive_limiters[identifier].get_adjusted_config()
 
         # Crear limiter según algoritmo
-        limiter: Any # Usar Any para evitar errores de tipo
         if config.algorithm == RateLimitAlgorithm.TOKEN_BUCKET:
             limiter = TokenBucket(
                 config.max_requests, config.window_seconds, config.burst_size
@@ -507,7 +506,7 @@ class RateLimitSystem:
 _global_rate_limiter: Optional[RateLimitSystem] = None
 
 
-def get_rate_limiter(**kwargs: Any) -> RateLimitSystem:
+def get_rate_limiter(**kwargs) -> RateLimitSystem:
     """Obtener instancia global del rate limiter
 
     Si se pasan kwargs y la instancia ya existe, se recrea con los nuevos parámetros.
@@ -522,7 +521,7 @@ def get_rate_limiter(**kwargs: Any) -> RateLimitSystem:
 # Decorator para rate limiting
 def rate_limit(
     max_requests: int = 10, window_seconds: float = 60.0, identifier: str = "default"
-) -> Callable[..., Any]:
+):
     """
     Decorator para aplicar rate limiting a funciones
 
@@ -532,8 +531,8 @@ def rate_limit(
         identifier: Identificador único (opcional)
     """
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def decorator(func):
+        def wrapper(*args, **kwargs):
             # Generar key desde args (primer argumento si existe, sino 'default')
             key = str(args[0]) if args else "default"
 
@@ -542,10 +541,9 @@ def rate_limit(
             config = RateLimitConfig(
                 max_requests=max_requests, window_seconds=window_seconds
             )
-            # Corregido: check_rate_limit en lugar de check_rate_limiter
-            allowed = limiter.check_rate_limit(key, config)
+            status = limiter.check_rate_limit(key, config)
 
-            if not allowed:
+            if not status:
                 raise Exception(f"Rate limit excedido para {key}")
 
             # Ejecutar función
@@ -565,69 +563,74 @@ if __name__ == "__main__":
 
     # Test 1: Token Bucket
     print("Test 1: Token Bucket (5 req/10s, burst=10)")
-    config1 = RateLimitConfig(
-        max_requests=5,
-        window_seconds=10,
-        algorithm=RateLimitAlgorithm.TOKEN_BUCKET,
-        burst_size=10,
+    limiter.register_limit(
+        "test_api",
+        RateLimitConfig(
+            max_requests=5,
+            window_seconds=10,
+            algorithm=RateLimitAlgorithm.TOKEN_BUCKET,
+            burst_size=10,
+        ),
     )
-    limiter.register_limit("test_api", config1)
-
 
     success_count = 0
     for i in range(12):
-        allowed = limiter.check_rate_limit("user_123", config1)
-        if allowed:
+        status = limiter.check_rate_limit("test_api", "user_123")
+        if status.allowed:
             success_count += 1
-            print(f"  ✅ Request {i + 1}: Permitido")
+            print(f"  ✅ Request {i + 1}: Permitido (remaining: {status.remaining})")
         else:
-            print(f"  ❌ Request {i + 1}: Rechazado")
+            print(
+                f"  ❌ Request {i + 1}: Rechazado (retry after: {status.retry_after_seconds:.1f}s)"
+            )
 
     print(f"  Total permitidos: {success_count}/12\n")
 
     # Test 2: Sliding Window
     print("Test 2: Sliding Window (3 req/5s)")
-    config2 = RateLimitConfig(
-        max_requests=3,
-        window_seconds=5,
-        algorithm=RateLimitAlgorithm.SLIDING_WINDOW,
+    limiter.register_limit(
+        "test_sliding",
+        RateLimitConfig(
+            max_requests=3,
+            window_seconds=5,
+            algorithm=RateLimitAlgorithm.SLIDING_WINDOW,
+        ),
     )
-    limiter.register_limit("test_sliding", config2)
-
 
     for i in range(5):
-        allowed = limiter.check_rate_limit("user_456", config2)
-        print(f"  Request {i + 1}: {'✅ OK' if allowed else '❌ DENIED'}")
+        status = limiter.check_rate_limit("test_sliding", "user_456")
+        print(f"  Request {i + 1}: {'✅ OK' if status.allowed else '❌ DENIED'}")
         time.sleep(1)
 
     print()
 
     # Test 3: Adaptive Rate Limiting
     print("Test 3: Adaptive Rate Limiting")
-    config3 = RateLimitConfig(
-        max_requests=10,
-        window_seconds=10,
-        algorithm=RateLimitAlgorithm.TOKEN_BUCKET,
-        adaptive=True,
+    limiter.register_limit(
+        "adaptive_api",
+        RateLimitConfig(
+            max_requests=10,
+            window_seconds=10,
+            algorithm=RateLimitAlgorithm.TOKEN_BUCKET,
+            adaptive=True,
+        ),
     )
-    limiter.register_limit("adaptive_api", config3)
-
 
     # Simular alta carga
     print("  Simulando alta carga (90%)...")
     limiter.update_system_load("adaptive_api", 0.9)
     time.sleep(0.1)
 
-    allowed = limiter.check_rate_limit("user_789", config3)
-    print(f"  Con alta carga: {'✅ OK' if allowed else '❌ DENIED'}")
+    status = limiter.check_rate_limit("adaptive_api", "user_789")
+    print(f"  Con alta carga: {'✅ OK' if status.allowed else '❌ DENIED'}")
 
     # Simular baja carga
     print("  Simulando baja carga (20%)...")
     limiter.update_system_load("adaptive_api", 0.2)
     time.sleep(0.1)
 
-    allowed = limiter.check_rate_limit("user_789", config3)
-    print(f"  Con baja carga: {'✅ OK' if allowed else '❌ DENIED'}")
+    status = limiter.check_rate_limit("adaptive_api", "user_789")
+    print(f"  Con baja carga: {'✅ OK' if status.allowed else '❌ DENIED'}")
 
     # Stats
     print("\nTest 4: Estadísticas")

@@ -1,4 +1,4 @@
-from __future__ import annotations
+from neural_symbiotic_network import get_neural_network
 #!/usr/bin/env python3
 """
 🧠 METACORTEX Memory System v2.0
@@ -16,45 +16,36 @@ Evolución v2.0:
 Compatible con versión anterior - Los sistemas v2.0 son opcionales
 """
 
-import hashlib
+import sqlite3
 import json
 import logging
-import sqlite3
 import time
-from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from typing import List, Dict, Any, Optional
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-# 🔥 IMPORTS OBLIGATORIOS - NO LAZY, NO TRY-EXCEPT
-# Si falta alguno, el sistema debe fallar inmediatamente con mensaje claro
-import networkx as nx
-import numpy as np
-from sklearn.cluster import DBSCAN, KMeans
-
-from advanced_cache_system import get_global_cache
-from neural_symbiotic_network import get_neural_network
-from vector_embedding_system import get_embedding_system
-
-_is_chromadb_available = False
-try:
-    import chromadb
-    from chromadb.config import Settings
-    _is_chromadb_available = True
-except ImportError:
-    chromadb = None
-    Settings = None
-    # _is_chromadb_available remains False
+import hashlib
+from dataclasses import dataclass, field
+from enum import Enum
 
 
 logger = logging.getLogger(__name__)
 
+# 🔥 IMPORTS OBLIGATORIOS - NO LAZY, NO TRY-EXCEPT
+# Si falta alguno, el sistema debe fallar inmediatamente con mensaje claro
+from vector_embedding_system import get_embedding_system
+from advanced_cache_system import get_global_cache
+# 🔧 Neural network import LAZY para evitar recursion depth exceeded
+# Este módulo se importa dentro de __init__ cuando se necesita
+import chromadb
+from chromadb.config import Settings
+import networkx as nx
+import numpy as np
+from sklearn.cluster import KMeans, DBSCAN
 
 # Flags explícitos (siempre True si llegamos aquí)
 EMBEDDINGS_V2_AVAILABLE = True
+CHROMADB_AVAILABLE = True
 NETWORKX_AVAILABLE = True
-CHROMADB_AVAILABLE = _is_chromadb_available
 
 
 class MemoryType(Enum):
@@ -76,7 +67,7 @@ class SemanticSearchResult:
     similarity: float
     timestamp: datetime
     memory_type: MemoryType
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict = field(default_factory=dict)
 
 
 class MetacortexMemory:
@@ -92,7 +83,7 @@ class MetacortexMemory:
 
     def __init__(
         self,
-        db_path: Optional[str] = None,
+        db_path: str = None,
         enable_semantic_search: bool = True,
         enable_knowledge_graph: bool = True,
     ):
@@ -119,29 +110,26 @@ class MetacortexMemory:
         # Inicializar base de datos
         self._init_database()
 
-        self.embedding_system: Optional[Any] = None
-        self.cache: Optional[Any] = None
-        self.chroma_client: Optional["chromadb.Client"] = None
-        self.chroma_conversations: Optional["chromadb.Collection"] = None
-        self.chroma_learnings: Optional["chromadb.Collection"] = None
-        self.chroma_knowledge: Optional["chromadb.Collection"] = None
-        self.knowledge_graph: Optional[nx.DiGraph[Any]] = None
-
         # 🆕 v2.0: Sistema de embeddings (OBLIGATORIO)
         if self.enable_semantic_search:
             self.embedding_system = get_embedding_system()
             self.cache = get_global_cache()
             self._init_chromadb()
             logger.info("✅ Búsqueda semántica habilitada")
+        else:
+            self.embedding_system = None
+            self.cache = None
 
         # 🆕 v2.0: Knowledge graph (OBLIGATORIO)
         if self.enable_knowledge_graph:
             self.knowledge_graph = nx.DiGraph()
             self._load_knowledge_graph()
             logger.info("✅ Knowledge graph habilitado")
+        else:
+            self.knowledge_graph = None
 
         # Mensaje informativo sobre modo de operación
-        mode_features: List[str] = []
+        mode_features = []
         if self.enable_semantic_search:
             mode_features.append("búsqueda semántica")
         if self.enable_knowledge_graph:
@@ -161,17 +149,32 @@ class MetacortexMemory:
         self.search = (
             self.semantic_search if self.enable_semantic_search else None
         )  # Alias para búsqueda semántica
-        self.working_memory: Dict[str, Any] = (
+        self.working_memory = (
             {}
         )  # Working memory básica (dict para contexto temporal)
 
         # 🔗 CONEXIÓN OBLIGATORIA CON NEURAL NETWORK
         logger.info("🔗 Conectando con Neural Symbiotic Network...")
-        self.neural_network = get_neural_network()
-        if not self.neural_network:
-            logger.error("❌ Neural Symbiotic Network no disponible - componente crítico")
-            raise RuntimeError("❌ Neural Symbiotic Network no disponible - componente crítico")
+        try:
+            # Import lazy para evitar recursion depth exceeded
+            self.neural_network = get_neural_network()
+        except RecursionError as e:
+            logger.error(f"❌ RecursionError al conectar con Neural Network: {e}")
+            raise RuntimeError(
+                "❌ Neural Symbiotic Network no disponible - componente crítico (RecursionError)"
+            ) from e
+        except Exception as e:
+            logger.error(f"❌ Error al conectar con Neural Network: {e}")
+            raise RuntimeError(
+                "❌ Neural Symbiotic Network no disponible - componente crítico"
+            ) from e
         
+        if not self.neural_network:
+            raise RuntimeError(
+                "❌ Neural Symbiotic Network no disponible - componente crítico"
+            )
+        
+        # Registrar este módulo en la red neuronal
         self.neural_network.register_module("memory_system", self)
         logger.info("   ✅ Conectado con Neural Symbiotic Network")
 
@@ -325,8 +328,6 @@ class MetacortexMemory:
         """
         if not CHROMADB_AVAILABLE:
             raise RuntimeError("❌ ChromaDB no disponible. Instalar con: pip install chromadb")
-        
-        assert chromadb is not None, "chromadb is None despite CHROMADB_AVAILABLE being True"
 
         # FIX: Usar PersistentClient en vez de Client (deprecated)
         chroma_path = str(Path(self.db_path).parent / "chromadb")
@@ -352,14 +353,14 @@ class MetacortexMemory:
 
         logger.info(f"✅ ChromaDB inicializado: {chroma_path}")
 
-    def _load_knowledge_graph(self) -> None:
+    def _load_knowledge_graph(self):
         """
         🆕 v2.0: Cargar knowledge graph desde la base de datos
 
         Carga todas las relaciones entity_relations y construye
         el grafo en memoria usando NetworkX.
         """
-        if not NETWORKX_AVAILABLE or not self.enable_knowledge_graph or self.knowledge_graph is None:
+        if not NETWORKX_AVAILABLE or not self.enable_knowledge_graph:
             return
 
         try:
@@ -397,10 +398,10 @@ class MetacortexMemory:
         session_id: str,
         user_message: str,
         assistant_response: str,
-        model_used: Optional[str] = None,
-        tokens_used: Optional[int] = None,
-        response_time: Optional[float] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        model_used: str = None,
+        tokens_used: int = None,
+        response_time: float = None,
+        metadata: Dict = None,
     ) -> int:
         """
         Guardar una conversación en la memoria
@@ -436,7 +437,7 @@ class MetacortexMemory:
         conversation_id = cursor.lastrowid
 
         # 🆕 v2.0: Generar y guardar embedding en ChromaDB
-        if self.enable_semantic_search and self.embedding_system and self.chroma_conversations:
+        if self.enable_semantic_search and self.embedding_system:
             try:
                 # Combinar mensaje de usuario y respuesta
                 full_text = f"Usuario: {user_message}\nAsistente: {assistant_response}"
@@ -546,10 +547,10 @@ class MetacortexMemory:
     def save_project(
         self,
         project_name: str,
-        project_path: Optional[str] = None,
-        description: Optional[str] = None,
-        technologies: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        project_path: str = None,
+        description: str = None,
+        technologies: List[str] = None,
+        metadata: Dict = None,
     ) -> int:
         """Guardar información de un proyecto"""
         conn = sqlite3.connect(self.db_path)
@@ -602,10 +603,10 @@ class MetacortexMemory:
         self,
         error_type: str,
         error_message: str,
-        solution: Optional[str] = None,
-        context: Optional[str] = None,
-        project_id: Optional[int] = None,
-        learned_from: Optional[str] = None,
+        solution: str = None,
+        context: str = None,
+        project_id: int = None,
+        learned_from: str = None,
     ) -> int:
         """
         Guardar un aprendizaje de un error
@@ -670,7 +671,7 @@ class MetacortexMemory:
             logger.info(f"📚 Nuevo aprendizaje guardado: {error_type}")
 
         # 🆕 v2.0: Generar y guardar embedding en ChromaDB
-        if self.enable_semantic_search and self.embedding_system and self.chroma_learnings:
+        if self.enable_semantic_search and self.embedding_system:
             try:
                 # Combinar toda la información del aprendizaje
                 full_text = f"Error: {error_type}\nMensaje: {error_message}\nSolución: {solution or 'N/A'}\nContexto: {context or 'N/A'}"
@@ -710,7 +711,7 @@ class MetacortexMemory:
         return learning_id if not existing else existing[0]
 
     def get_solution_for_error(
-        self, error_type: Optional[str] = None, error_message: Optional[str] = None
+        self, error_type: str = None, error_message: str = None
     ) -> Optional[Dict[str, Any]]:
         """
         Buscar solución para un error basándose en aprendizajes previos
@@ -753,8 +754,8 @@ class MetacortexMemory:
         self,
         topic: str,
         content: str,
-        source: Optional[str] = None,
-        tags: Optional[List[str]] = None,
+        source: str = None,
+        tags: List[str] = None,
         relevance_score: float = 0.5,
     ) -> int:
         """Guardar conocimiento en la base de datos"""
@@ -872,7 +873,7 @@ class MetacortexMemory:
         session = self.get_session_context(session_id)
 
         # Construir contexto
-        context_parts: List[str] = []
+        context_parts = []
 
         if session and session.get("current_project_id"):
             context_parts.append("📁 Proyecto actual activo")
@@ -939,7 +940,7 @@ class MetacortexMemory:
     def semantic_search(
         self,
         query: str,
-        memory_types: Optional[List[MemoryType]] = None,
+        memory_types: List[MemoryType] = None,
         top_k: int = 5,
         min_similarity: float = 0.7,
     ) -> List[SemanticSearchResult]:
@@ -955,7 +956,7 @@ class MetacortexMemory:
         Returns:
             Lista de resultados ordenados por relevancia
         """
-        if not self.enable_semantic_search or not self.embedding_system:
+        if not self.enable_semantic_search:
             logger.warning("⚠️ Búsqueda semántica no disponible, usando búsqueda básica")
             return []
 
@@ -967,10 +968,10 @@ class MetacortexMemory:
             if hasattr(query_embedding, "tolist"):
                 query_embedding = query_embedding.tolist()
 
-            results: List[SemanticSearchResult] = []
+            results = []
 
             # Buscar en conversaciones
-            if (not memory_types or MemoryType.CONVERSATION in memory_types) and self.chroma_conversations:
+            if not memory_types or MemoryType.CONVERSATION in memory_types:
                 conv_results = self.chroma_conversations.query(
                     query_embeddings=[query_embedding], n_results=top_k
                 )
@@ -993,7 +994,7 @@ class MetacortexMemory:
                         )
 
             # Buscar en learnings
-            if (not memory_types or MemoryType.LEARNING in memory_types) and self.chroma_learnings:
+            if not memory_types or MemoryType.LEARNING in memory_types:
                 learning_results = self.chroma_learnings.query(
                     query_embeddings=[query_embedding], n_results=top_k
                 )
@@ -1019,7 +1020,7 @@ class MetacortexMemory:
                         )
 
             # Buscar en knowledge base
-            if (not memory_types or MemoryType.KNOWLEDGE in memory_types) and self.chroma_knowledge:
+            if not memory_types or MemoryType.KNOWLEDGE in memory_types:
                 knowledge_results = self.chroma_knowledge.query(
                     query_embeddings=[query_embedding], n_results=top_k
                 )
@@ -1054,8 +1055,8 @@ class MetacortexMemory:
             return []
 
     def cluster_conversations(
-        self, session_id: Optional[str] = None, n_clusters: int = 5, method: str = "kmeans"
-    ) -> Dict[int, List[Dict[str, Any]]]:
+        self, session_id: str = None, n_clusters: int = 5, method: str = "kmeans"
+    ) -> Dict[int, List[Dict]]:
         """
         🆕 v2.0: Agrupar conversaciones similares usando clustering
 
@@ -1067,11 +1068,10 @@ class MetacortexMemory:
         Returns:
             Diccionario {cluster_id: [conversaciones]}
         """
-        if not self.enable_semantic_search or not self.embedding_system:
+        if not self.enable_semantic_search:
             logger.warning("⚠️ Clustering no disponible")
             return {}
 
-        
         try:
             # Obtener conversaciones
             conn = sqlite3.connect(self.db_path)
@@ -1095,12 +1095,12 @@ class MetacortexMemory:
                 ORDER BY timestamp
                 """)
 
-            conversations: List[Dict[str, Any]] = [dict(row) for row in cursor.fetchall()]
+            conversations = [dict(row) for row in cursor.fetchall()]
             conn.close()
 
             if len(conversations) < n_clusters:
                 logger.warning(
-                    f"⚠️ Muy pocas conversaciones ({len(conversaciones)}) para {n_clusters} clusters"
+                    f"⚠️ Muy pocas conversaciones ({len(conversations)}) para {n_clusters} clusters"
                 )
                 return {0: conversations}
 
@@ -1119,20 +1119,18 @@ class MetacortexMemory:
             # Clustering con scikit-learn
 
             if method == "kmeans":
-                clusterer = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+                clusterer = KMeans(n_clusters=n_clusters, random_state=42)
             else:  # dbscan
                 clusterer = DBSCAN(eps=0.5, min_samples=2)
 
             clusters = clusterer.fit_predict(embeddings_array)
 
             # Agrupar por cluster
-            result: Dict[int, List[Dict[str, Any]]] = {}
+            result: Dict[int, List[Dict]] = {}
             for conv, cluster_id in zip(conversations, clusters):
-                # Asegurarse que cluster_id sea un int estándar de Python
-                py_cluster_id = int(cluster_id)
-                if py_cluster_id not in result:
-                    result[py_cluster_id] = []
-                result[py_cluster_id].append(conv)
+                if cluster_id not in result:
+                    result[cluster_id] = []
+                result[cluster_id].append(conv)
 
             # Guardar en base de datos
             conn = sqlite3.connect(self.db_path)
@@ -1168,7 +1166,7 @@ class MetacortexMemory:
         relation_type: str,
         target_entity: str,
         weight: float = 1.0,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Dict = None,
     ) -> bool:
         """
         🆕 v2.0: Agregar relación al knowledge graph
@@ -1183,7 +1181,7 @@ class MetacortexMemory:
         Returns:
             True si se agregó exitosamente
         """
-        if not self.enable_knowledge_graph or self.knowledge_graph is None:
+        if not self.enable_knowledge_graph:
             logger.warning("⚠️ Knowledge graph no disponible")
             return False
 
@@ -1230,7 +1228,7 @@ class MetacortexMemory:
             return False
 
     def get_related_entities(
-        self, entity: str, max_depth: int = 2, relation_types: Optional[List[str]] = None
+        self, entity: str, max_depth: int = 2, relation_types: List[str] = None
     ) -> Dict[str, Any]:
         """
         🆕 v2.0: Obtener entidades relacionadas en el knowledge graph
@@ -1243,7 +1241,7 @@ class MetacortexMemory:
         Returns:
             Diccionario con entidades relacionadas y sus relaciones
         """
-        if not self.enable_knowledge_graph or self.knowledge_graph is None:
+        if not self.enable_knowledge_graph:
             logger.warning("⚠️ Knowledge graph no disponible")
             return {}
 
@@ -1256,7 +1254,7 @@ class MetacortexMemory:
                 }
 
             # BFS para encontrar entidades relacionadas
-            related: Dict[str, Any] = {}
+            related = {}
             visited = set()
             queue = [(entity, 0)]  # (nodo, profundidad)
 
@@ -1318,8 +1316,7 @@ class MetacortexMemory:
         """
         if not self.enable_semantic_search:
             # Fallback a búsqueda básica
-            solution = self.get_solution_for_error(error_message=error_message)
-            return [solution] if solution else []
+            return self.get_solution_for_error(error_message=error_message)
 
         try:
             # Buscar semánticamente
@@ -1373,7 +1370,7 @@ class MetacortexMemory:
         Returns:
             Diccionario con estadísticas de búsqueda semántica y knowledge graph
         """
-        stats: Dict[str, Any] = {
+        stats = {
             "version": "2.0"
             if (self.enable_semantic_search or self.enable_knowledge_graph)
             else "1.0",
@@ -1388,7 +1385,7 @@ class MetacortexMemory:
             },
         }
 
-        if self.enable_semantic_search and self.chroma_conversations and self.chroma_learnings and self.chroma_knowledge:
+        if self.enable_semantic_search:
             try:
                 stats["chromadb"] = {
                     "conversations": self.chroma_conversations.count(),
@@ -1399,7 +1396,7 @@ class MetacortexMemory:
                 logger.error(f"Error: {e}", exc_info=True)
                 stats["chromadb"] = {"error": "No se pudo obtener estadísticas"}
 
-        if self.enable_knowledge_graph and self.knowledge_graph is not None:
+        if self.enable_knowledge_graph:
             stats["knowledge_graph"] = {
                 "nodes": len(self.knowledge_graph.nodes),
                 "edges": len(self.knowledge_graph.edges),
@@ -1407,7 +1404,7 @@ class MetacortexMemory:
 
         return stats
 
-    def store_episode(self, episode_data: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
+    def store_episode(self, episode_data: dict = None, **kwargs):
         """
         Almacenar un episodio completo en memoria
 
@@ -1445,7 +1442,7 @@ class MetacortexMemory:
 
             # Guardar en memoria episódica
             if not hasattr(self, "episodes"):
-                self.episodes: List[Dict[str, Any]] = []
+                self.episodes = []
 
             self.episodes.append(episode)
 
@@ -1464,7 +1461,7 @@ class MetacortexMemory:
 _global_memory: Optional[MetacortexMemory] = None
 
 
-def get_memory(db_path: Optional[str] = None) -> MetacortexMemory:
+def get_memory(db_path: str = None) -> MetacortexMemory:
     """Obtener instancia global de memoria"""
     global _global_memory
     if _global_memory is None:
@@ -1472,6 +1469,6 @@ def get_memory(db_path: Optional[str] = None) -> MetacortexMemory:
     return _global_memory
 
 
-def get_memory_system(db_path: Optional[str] = None) -> MetacortexMemory:
+def get_memory_system(db_path: str = None) -> MetacortexMemory:
     """Alias para get_memory() - compatibilidad con imports"""
     return get_memory(db_path)

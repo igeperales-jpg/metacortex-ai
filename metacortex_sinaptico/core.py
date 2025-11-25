@@ -1,4 +1,3 @@
-from __future__ import annotations
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # filepath: /Users/edkanina/constructor_ia/metacortex_sinaptico/core.py
@@ -10,6 +9,7 @@ Agente cognitivo principal que integra todos los subsistemas:
     pass  # TODO: Implementar
 homeostasis, afecto, BDI, planificación, aprendizaje y metacognición.
 """
+from __future__ import annotations
 
 import logging
 import sys
@@ -138,6 +138,21 @@ class CognitiveAgent:
 
         self.logger.info("Agente cognitivo inicializado exitosamente")
 
+    def set_capabilities(self, capabilities: Dict[str, Any]):
+        """
+        Inyecta las capacidades (herramientas) en el agente.
+        """
+        self.capabilities = capabilities
+        self.logger.info("Capacidades inyectadas en el agente.")
+
+        # Asignar capacidades específicas a atributos para fácil acceso
+        if "programming" in self.capabilities:
+            self.programming_agent = self.capabilities["programming"]
+        if "search" in self.capabilities:
+            self.search_agent = self.capabilities["search"]
+        if "llm" in self.capabilities:
+            self.llm = self.capabilities["llm"]
+
     def _init_subsystems(self) -> None:
         """Inicializa todos los subsistemas."""
         try:
@@ -158,7 +173,7 @@ class CognitiveAgent:
             )
 
             # Sistema afectivo
-            self.affect_system = AffectSystem(self.neural_hub)
+            self.affect_system = AffectSystem(self.config.__dict__)
 
             # BDI
             self.bdi_system = BDISystem()
@@ -192,18 +207,18 @@ class CognitiveAgent:
         try:
             # Definir categorías de eventos a las que nos suscribimos
             subscriptions = {
-                "PERCEPTION",
-                "MEMORY_RETRIEVE",
-                "ANOMALY_DETECTED",
-                "ALERT"
+                self.EventCategory.PERCEPTION,
+                self.EventCategory.MEMORY_RETRIEVE,
+                self.EventCategory.ANOMALY_DETECTED,
+                self.EventCategory.ALERT
             }
             
             # Definir handlers para cada categoría
             handlers = {
-                "PERCEPTION": self._handle_perception_event,
-                "MEMORY_RETRIEVE": self._handle_memory_event,
-                "ANOMALY_DETECTED": self._handle_anomaly_event,
-                "ALERT": self._handle_alert_event
+                self.EventCategory.PERCEPTION: self._handle_perception_event,
+                self.EventCategory.MEMORY_RETRIEVE: self._handle_memory_event,
+                self.EventCategory.ANOMALY_DETECTED: self._handle_anomaly_event,
+                self.EventCategory.ALERT: self._handle_alert_event
             }
             
             # Registrar en el hub
@@ -228,40 +243,7 @@ class CognitiveAgent:
         except Exception as e:
             logger.error(f"Error en core.py: {e}", exc_info=True)
             self.logger.error(f"Error procesando evento de percepción: {e}")
-    
-    def _handle_memory_event(self, event: Any) -> None:
-        """Handler para eventos de memoria."""
-        try:
-            query = event.data.get("query", "")
-            if query and self.memory:
-                results = self.memory.semantic_search(query, limit=5)
-                if event.requires_response:
-                    event.response_data = results
-        except Exception as e:
-            logger.error(f"Error en core.py: {e}", exc_info=True)
-            self.logger.error(f"Error procesando evento de memoria: {e}")
-    
-    def _handle_anomaly_event(self, event: Any) -> None:
-        """Handler para eventos de anomalía."""
-        try:
-            # Actualizar estado cognitivo con anomalía detectada
-            anomaly_data = event.data
-            self.cognitive_state["recent_anomalies"] = \
-                int(self.cognitive_state.get("recent_anomalies", 0)) + 1
-            
-            # Almacenar en memoria
-            self.memory.store_episode(
-                name="anomaly_detected",
-                data=anomaly_data,
-                anomaly=True
-            )
-            
-            self.logger.warning(f"🚨 Anomalía detectada: {anomaly_data}")
-            
-        except Exception as e:
-            logger.error(f"Error en core.py: {e}", exc_info=True)
-            self.logger.error(f"Error procesando evento de anomalía: {e}")
-    
+
     def _handle_alert_event(self, event: Any) -> None:
         """Handler para eventos de alerta."""
         try:
@@ -274,11 +256,17 @@ class CognitiveAgent:
             # Si es crítica, ajustar prioridades
             if severity == "CRITICAL":
                 self.bdi_system.add_desire("handle_critical_alert", priority=0.99)
+
+                # Activar capacidad de programación para auto-reparación
+                if self.programming_agent:
+                    self.logger.info("Activando agente de programación para auto-reparación...")
+                    # Aquí se podría invocar una función de diagnóstico y reparación
+                    # self.programming_agent.diagnose_and_repair()
             
         except Exception as e:
             logger.error(f"Error en core.py: {e}", exc_info=True)
             self.logger.error(f"Error procesando evento de alerta: {e}")
-    
+
     def _connect_subsystems(self) -> None:
         """
         🔗 Conecta subsistemas entre sí para habilitarintegración profunda.
@@ -329,7 +317,6 @@ class CognitiveAgent:
             try:
                 from pathlib import Path as PathLib
                 sys.path.insert(0, str(PathLib(__file__).parent.parent))
-                from universal_knowledge_connector import get_knowledge_connector
 
 
                 # ✅ SINGLETON - Instancia global compartida (evita duplicación masiva)
@@ -485,8 +472,8 @@ class CognitiveAgent:
                     event = self.Event(
                         id=f"perception_{time.time()}_{name}",
                         category=self.EventCategory.PERCEPTION,
-                        source="cognitive_agent",
-                        payload={
+                        source_module="cognitive_agent",
+                        data={
                             "name": name,
                             "payload": payload,
                             "anomaly": anomaly_result.is_anomaly,
@@ -494,7 +481,7 @@ class CognitiveAgent:
                         },
                         priority=self.EventPriority.HIGH if anomaly_result.is_anomaly else self.EventPriority.NORMAL
                     )
-                    self.neural_hub.publish(event)
+                    self.neural_hub.emit_event(event)
                 except Exception as e:
                     logger.error(f"Error en core.py: {e}", exc_info=True)
                     self.logger.debug(f"No se pudo emitir evento al hub: {e}")
@@ -672,6 +659,12 @@ class CognitiveAgent:
             if self.tick_count % 10 == 0 and recent_anomalies > 0:
                 auto_mod_result = self._evaluar_auto_modificacion()
 
+                # Si se necesita modificación, usar el agente de programación
+                if auto_mod_result and auto_mod_result.get("action_needed") and self.programming_agent:
+                    self.logger.info("🧠 El agente cognitivo ha decidido auto-mejorarse.")
+                    self.programming_agent.materialize_metacortex_thoughts()
+
+
             # 7. Aprendizaje estructural
             learning_result: Optional[Dict[str, Any]] = None
             if self.tick_count % 3 == 0:
@@ -754,23 +747,9 @@ class CognitiveAgent:
             # Seleccionar nueva intención si no hay una activa
             if not self.bdi_system.current_intention:
                 current_state = self._get_current_state_dict()
-                # 🔥 FIX: Manejar método async select_intention de forma segura
-                intention_result = self.bdi_system.select_intention(current_state)
-                # Si es coroutine, ejecutarla con asyncio
-                if hasattr(intention_result, '__await__'):
-                    import asyncio
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            # Si ya hay un loop corriendo, crear una tarea
-                            self.bdi_system.current_intention = None  # Temporalmente None
-                        else:
-                            self.bdi_system.current_intention = loop.run_until_complete(intention_result)
-                    except RuntimeError:
-                        # No hay loop, crear uno nuevo
-                        self.bdi_system.current_intention = asyncio.run(intention_result)
-                else:
-                    self.bdi_system.current_intention = intention_result
+                self.bdi_system.current_intention = self.bdi_system.select_intention(
+                    current_state
+                )
 
             # Añadir deseos evolutivos dinámicos
             if not self.bdi_system.desires:
@@ -998,21 +977,9 @@ class CognitiveAgent:
         # Seleccionar nueva intención si no hay una activa
         if not self.bdi_system.current_intention:
             current_state = self._get_current_state_dict()
-            # 🔥 FIX: Manejar método async select_intention de forma segura
-            intention_result = self.bdi_system.select_intention(current_state)
-            # Si es coroutine, ejecutarla con asyncio
-            if hasattr(intention_result, '__await__'):
-                import asyncio
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        self.bdi_system.current_intention = None
-                    else:
-                        self.bdi_system.current_intention = loop.run_until_complete(intention_result)
-                except RuntimeError:
-                    self.bdi_system.current_intention = asyncio.run(intention_result)
-            else:
-                self.bdi_system.current_intention = intention_result
+            self.bdi_system.current_intention = self.bdi_system.select_intention(
+                current_state
+            )
 
         # Añadir deseos básicos si no los hay
         if not self.bdi_system.desires:
@@ -1380,6 +1347,12 @@ class CognitiveAgent:
     def get_concept_from_memory(self, concept: str) -> Optional[Dict[str, Any]]:
         """
         Obtiene un concepto específico de la memoria jerárquica.
+        """
+        if not self.hierarchical_graph:
+            self.logger.warning("⚠️ Memoria jerárquica no disponible")
+            return None
+
+       
         """
         if not self.hierarchical_graph:
             self.logger.warning("⚠️ Memoria jerárquica no disponible")

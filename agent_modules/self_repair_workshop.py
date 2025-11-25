@@ -26,18 +26,11 @@ Fecha: 2025-11-11
 import re
 import ast
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING, Callable
+from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
 import time
-
-if TYPE_CHECKING:
-    from agent_modules.advanced_testing_lab import TestReport, AdvancedTestingLab
-    from agent_modules.code_generator import CodeGenerator
-    from agent_modules.project_analyzer import ProjectAnalyzer
-    from agent_modules.telemetry_system import TelemetrySystem
-    from neural_symbiotic_network import MetacortexNeuralSymbioticNetworkV2
 
 logger = logging.getLogger(__name__)
 
@@ -74,28 +67,10 @@ class RepairReport:
     repairs_attempted: int
     repairs_successful: int
     final_score: float
-    actions: List["RepairAction"] = field(default_factory=list)
+    actions: List[RepairAction] = field(default_factory=list)
     requires_manual_review: bool = False
     execution_time_ms: float = 0.0
     timestamp: float = field(default_factory=time.time)
-
-
-@dataclass
-class RepairPattern:
-    """Define la estructura de un patrón de reparación."""
-    pattern: str
-    fix: Callable[[re.Match[str]], str]
-    confidence: float
-    strategy: RepairStrategy
-    requires_import: Optional[str] = None
-
-
-@dataclass
-class ImportPattern:
-    """Define la estructura de un patrón de reparación de importación."""
-    trigger: str
-    fix: str
-    confidence: float
 
 
 class SelfRepairWorkshop:
@@ -104,11 +79,7 @@ class SelfRepairWorkshop:
     """
 
     def __init__(
-        self, 
-        testing_lab: Optional["AdvancedTestingLab"] = None, 
-        code_generator: Optional["CodeGenerator"] = None, 
-        project_analyzer: Optional["ProjectAnalyzer"] = None, 
-        telemetry: Optional["TelemetrySystem"] = None
+        self, testing_lab=None, code_generator=None, project_analyzer=None, telemetry=None
     ):
         """
         Inicializa el taller
@@ -124,7 +95,6 @@ class SelfRepairWorkshop:
         self.code_generator = code_generator
         self.project_analyzer = project_analyzer
         self.telemetry = telemetry
-        self.neural_network: Optional["MetacortexNeuralSymbioticNetworkV2"] = None
 
         # Conexión a red neuronal
         try:
@@ -149,70 +119,83 @@ class SelfRepairWorkshop:
 
         logger.info("🔧 Self-Repair Workshop inicializado")
 
-    @staticmethod
-    def _fix_missing_colon(m: re.Match[str]) -> str:
-        return m.group(0) + ":"
-
-    @staticmethod
-    def _fix_missing_parenthesis(m: re.Match[str]) -> str:
-        return f"print({m.group(1)})"
-
-    @staticmethod
-    def _fix_eval_to_literal_eval(m: re.Match[str]) -> str:
-        return f"ast.literal_eval({m.group(1)})"
-
-    @staticmethod
-    def _fix_shell_true_to_false(m: re.Match[str]) -> str:
-        return f"subprocess.{m.group(1)}({m.group(2)}, shell=False"
-
-    @staticmethod
-    def _fix_string_concat_to_join(m: re.Match[str]) -> str:
-        return f"# Usa {m.group(1)} = ''.join([...]) en lugar de +="
-
-    def _initialize_repair_patterns(self) -> Dict[str, RepairPattern]:
+    def _initialize_repair_patterns(self) -> Dict[str, Any]:
         """Inicializa patterns de reparación conocidos"""
         return {
             # SYNTAX FIXES
-            "missing_colon": RepairPattern(
-                pattern=r"(if|elif|else|for|while|def|class)\s+[^:]+$",
-                fix=self._fix_missing_colon,
-                confidence=0.95,
-                strategy=RepairStrategy.SYNTAX_FIX
-            ),
-            "missing_parenthesis": RepairPattern(
-                pattern=r"print\s+(['\"].*['\"])",
-                fix=self._fix_missing_parenthesis,
-                confidence=0.90,
-                strategy=RepairStrategy.SYNTAX_FIX
-            ),
+            "missing_colon": {
+                "pattern": r"(if|elif|else|for|while|def|class)\s+[^:]+$",
+                "fix": lambda m: m.group(0) + ":",
+                "confidence": 0.95,
+            },
+            "missing_parenthesis": {
+                "pattern": r"print\s+(['\"].*['\"])",
+                "fix": lambda m: f"print({m.group(1)})",
+                "confidence": 0.90,
+            },
+            # IMPORT FIXES
+            "missing_import": {
+                "typing_optional": {
+                    "trigger": "Optional[",
+                    "fix": "from typing import Optional\n",
+                    "confidence": 1.0,
+                },
+                "typing_list": {
+                    "trigger": "List[",
+                    "fix": "from typing import List\n",
+                    "confidence": 1.0,
+                },
+                "typing_dict": {
+                    "trigger": "Dict[",
+                    "fix": "from typing import Dict\n",
+                    "confidence": 1.0,
+                },
+                "typing_tuple": {
+                    "trigger": "Tuple[",
+                    "fix": "from typing import Tuple\n",
+                    "confidence": 1.0,
+                },
+                "typing_any": {
+                    "trigger": "Any",
+                    "fix": "from typing import Any\n",
+                    "confidence": 1.0,
+                },
+                "pathlib_path": {
+                    "trigger": "Path(",
+                    "fix": "from pathlib import Path\n",
+                    "confidence": 1.0,
+                },
+                "dataclasses": {
+                    "trigger": "@dataclass",
+                    "fix": "from dataclasses import dataclass\n",
+                    "confidence": 1.0,
+                },
+            },
             # SECURITY FIXES
-            "eval_to_literal_eval": RepairPattern(
-                pattern=r"eval\(([^)]+)\)",
-                fix=self._fix_eval_to_literal_eval,
-                confidence=0.85,
-                strategy=RepairStrategy.SECURITY_FIX,
-                requires_import="import ast\n"
-            ),
-            "shell_true_to_false": RepairPattern(
-                pattern=r"subprocess\.(run|call|Popen)\(([^)]+),\s*shell=True",
-                fix=self._fix_shell_true_to_false,
-                confidence=0.80,
-                strategy=RepairStrategy.SECURITY_FIX
-            ),
+            "eval_to_literal_eval": {
+                "pattern": r"eval\(([^)]+)\)",
+                "fix": lambda m: f"ast.literal_eval({m.group(1)})",
+                "confidence": 0.85,
+                "requires_import": "import ast\n",
+            },
+            "shell_true_to_false": {
+                "pattern": r"subprocess\.(run|call|Popen)\(([^)]+),\s*shell=True",
+                "fix": lambda m: f"subprocess.{m.group(1)}({m.group(2)}, shell=False",
+                "confidence": 0.80,
+            },
             # PERFORMANCE FIXES
-            "string_concat_to_join": RepairPattern(
-                pattern=r"for .+ in .+:\s+(\w+)\s*\+=\s*['\"]",
-                fix=self._fix_string_concat_to_join,
-                confidence=0.70,
-                strategy=RepairStrategy.PERFORMANCE_FIX
-            ),
+            "string_concat_to_join": {
+                "pattern": r"for .+ in .+:\s+(\w+)\s*\+=\s*['\"]",
+                "fix": lambda m: f"# Usa {m.group(1)} = ''.join([...]) en lugar de +=",
+                "confidence": 0.70,
+            },
         }
 
     def repair_code(
         self,
         code: str,
         file_path: str = "repaired.py",
-        test_report: Optional["TestReport"] = None,
+        test_report=None,
         max_attempts: int = 3,
     ) -> RepairReport:
         """
@@ -253,13 +236,13 @@ class SelfRepairWorkshop:
             if test_report and any(
                 i.category.value == "syntax" for i in test_report.issues
             ):
-                current_code, syntax_actions = self._apply_pattern_fixes(
-                    current_code, [self.repair_patterns["missing_colon"], self.repair_patterns["missing_parenthesis"]]
+                current_code, syntax_actions = self._apply_syntax_fixes(
+                    current_code, test_report
                 )
                 actions.extend(syntax_actions)
                 repaired = repaired or len(syntax_actions) > 0
 
-            # 2. IMPORT FIXES (Mantiene su lógica separada por ahora)
+            # 2. IMPORT FIXES
             if test_report and any(
                 i.category.value == "integration" for i in test_report.issues
             ):
@@ -273,8 +256,8 @@ class SelfRepairWorkshop:
             if test_report and any(
                 i.category.value == "security" for i in test_report.issues
             ):
-                current_code, security_actions = self._apply_pattern_fixes(
-                    current_code, [self.repair_patterns["eval_to_literal_eval"], self.repair_patterns["shell_true_to_false"]]
+                current_code, security_actions = self._apply_security_fixes(
+                    current_code, test_report
                 )
                 actions.extend(security_actions)
                 repaired = repaired or len(security_actions) > 0
@@ -291,18 +274,16 @@ class SelfRepairWorkshop:
 
             # Re-testear si se hicieron cambios
             if repaired and self.testing_lab:
-                new_test_report = self.testing_lab.test_python_code(current_code, file_path)
-                if new_test_report:
-                    test_report = new_test_report
-                    logger.info(
-                        f"   Re-test: Score {test_report.score:.1f}/100, "
-                        f"Issues: {len(test_report.issues)}"
-                    )
+                test_report = self.testing_lab.test_python_code(current_code, file_path)
+                logger.info(
+                    f"   Re-test: Score {test_report.score:.1f}/100, "
+                    f"Issues: {len(test_report.issues)}"
+                )
 
-                    # Si el score es aceptable, terminar
-                    if test_report.score >= 85.0:
-                        logger.info(f"   ✅ Reparación exitosa - Score: {test_report.score:.1f}/100")
-                        break
+                # Si el score es aceptable, terminar
+                if test_report.score >= 85.0:
+                    logger.info(f"   ✅ Reparación exitosa - Score: {test_report.score:.1f}/100")
+                    break
             else:
                 logger.info("   No se aplicaron reparaciones en este intento")
                 break
@@ -321,18 +302,17 @@ class SelfRepairWorkshop:
 
         # Telemetría
         if self.telemetry:
-            self.telemetry.requests_total.labels(module="self_repair_workshop", operation="repair_code").inc()
-            if final_score < 85.0:
-                self.telemetry.requests_failed_total.labels(
-                    module="self_repair_workshop", 
-                    operation="repair_code", 
-                    reason="low_score"
-                ).inc()
-            self.telemetry.request_latency.labels(
-                module="self_repair_workshop", 
-                operation="repair_code"
-            ).observe(execution_time / 1000)
-
+            self.telemetry.record_operation(
+                operation="repair_code",
+                duration=execution_time / 1000,
+                success=final_score >= 85.0,
+                metadata={
+                    "file": file_path,
+                    "original_issues": original_issues,
+                    "final_score": final_score,
+                    "repairs": len(actions),
+                },
+            )
 
         logger.info(
             f"✅ Auto-reparación completada: {file_path} - "
@@ -351,68 +331,71 @@ class SelfRepairWorkshop:
             execution_time_ms=execution_time,
         )
 
-    def _apply_pattern_fixes(self, code: str, patterns: List[RepairPattern]) -> Tuple[str, List[RepairAction]]:
-        """Aplica una lista de patrones de reparación basados en regex."""
-        actions: List[RepairAction] = []
+    def _apply_syntax_fixes(self, code: str, test_report) -> Tuple[str, List[RepairAction]]:
+        """Aplica fixes de sintaxis"""
+        actions = []
         fixed_code = code
-        
-        for pattern in patterns:
-            matches = list(re.finditer(pattern.pattern, fixed_code, re.MULTILINE))
-            for match in matches:
-                code_after = pattern.fix(match)
-                action = RepairAction(
-                    strategy=pattern.strategy,
-                    description=f"Aplicado patrón: {pattern.strategy.value}",
-                    code_before=match.group(0),
-                    code_after=code_after,
-                    confidence=pattern.confidence,
-                )
-                fixed_code = fixed_code.replace(match.group(0), code_after)
-                action.applied = True
-                action.success = True
-                actions.append(action)
 
-                # Añadir import si es necesario
-                if pattern.requires_import and pattern.requires_import not in fixed_code:
-                    fixed_code = pattern.requires_import + fixed_code
-        
+        # Pattern: missing colon
+        pattern = self.repair_patterns["missing_colon"]
+        matches = list(re.finditer(pattern["pattern"], fixed_code, re.MULTILINE))
+        for match in matches:
+            action = RepairAction(
+                strategy=RepairStrategy.SYNTAX_FIX,
+                description="Añadir ':' faltante",
+                code_before=match.group(0),
+                code_after=pattern["fix"](match),
+                confidence=pattern["confidence"],
+            )
+            fixed_code = fixed_code.replace(match.group(0), action.code_after)
+            action.applied = True
+            action.success = True
+            actions.append(action)
+
+        # Pattern: missing parenthesis in print
+        pattern = self.repair_patterns["missing_parenthesis"]
+        matches = list(re.finditer(pattern["pattern"], fixed_code))
+        for match in matches:
+            action = RepairAction(
+                strategy=RepairStrategy.SYNTAX_FIX,
+                description="Añadir paréntesis a print",
+                code_before=match.group(0),
+                code_after=pattern["fix"](match),
+                confidence=pattern["confidence"],
+            )
+            fixed_code = fixed_code.replace(match.group(0), action.code_after)
+            action.applied = True
+            action.success = True
+            actions.append(action)
+
         return fixed_code, actions
 
-
-    def _apply_import_fixes(self, code: str, test_report: "TestReport") -> Tuple[str, List[RepairAction]]:
+    def _apply_import_fixes(self, code: str, test_report) -> Tuple[str, List[RepairAction]]:
         """Aplica fixes de imports"""
-        actions: List[RepairAction] = []
+        actions = []
         fixed_code = code
 
         # Detectar imports faltantes por uso de tipos
-        missing_imports_patterns: List[ImportPattern] = [
-            ImportPattern(trigger="Optional[", fix="from typing import Optional\n", confidence=1.0),
-            ImportPattern(trigger="List[", fix="from typing import List\n", confidence=1.0),
-            ImportPattern(trigger="Dict[", fix="from typing import Dict\n", confidence=1.0),
-            ImportPattern(trigger="Tuple[", fix="from typing import Tuple\n", confidence=1.0),
-            ImportPattern(trigger="Any", fix="from typing import Any\n", confidence=1.0),
-            ImportPattern(trigger="Path(", fix="from pathlib import Path\n", confidence=1.0),
-            ImportPattern(trigger="@dataclass", fix="from dataclasses import dataclass\n", confidence=1.0),
-        ]
+        missing_imports = self.repair_patterns["missing_import"]
 
-        imports_to_add: List[ImportPattern] = []
-        for pattern_info in missing_imports_patterns:
-            if pattern_info.trigger in fixed_code:
+        imports_to_add = []
+        for name, pattern_info in missing_imports.items():
+            if pattern_info["trigger"] in fixed_code:
                 # Verificar que no esté ya importado
-                if pattern_info.fix.strip() not in fixed_code:
-                    imports_to_add.append(pattern_info)
+                if pattern_info["fix"].strip() not in fixed_code:
+                    imports_to_add.append((name, pattern_info))
 
         # Añadir imports al principio
         if imports_to_add:
             import_section = ""
-            for pattern_info in imports_to_add:
-                import_section += pattern_info.fix
+            for name, pattern_info in imports_to_add:
+                import_section += pattern_info["fix"]
                 action = RepairAction(
                     strategy=RepairStrategy.IMPORT_FIX,
-                    description=f"Añadir import faltante: {pattern_info.fix.strip()}",
+                    description=f"Añadir import faltante: {pattern_info['fix'].strip()}",
                     code_before="",
-                    code_after=pattern_info.fix,
-                    confidence=pattern_info.confidence,
+                    code_after=pattern_info["fix"],
+                    confidence=pattern_info["confidence"],
                 )
                 action.applied = True
                 action.success = True
@@ -430,9 +413,52 @@ class SelfRepairWorkshop:
 
         return fixed_code, actions
 
-    def _apply_type_hint_fixes(self, code: str, test_report: "TestReport") -> Tuple[str, List[RepairAction]]:
+    def _apply_security_fixes(self, code: str, test_report) -> Tuple[str, List[RepairAction]]:
+        """Aplica fixes de seguridad"""
+        actions = []
+        fixed_code = code
+
+        # Fix: eval() -> ast.literal_eval()
+        pattern = self.repair_patterns["eval_to_literal_eval"]
+        matches = list(re.finditer(pattern["pattern"], fixed_code))
+        for match in matches:
+            action = RepairAction(
+                strategy=RepairStrategy.SECURITY_FIX,
+                description="Reemplazar eval() con ast.literal_eval()",
+                code_before=match.group(0),
+                code_after=pattern["fix"](match),
+                confidence=pattern["confidence"],
+            )
+            fixed_code = fixed_code.replace(match.group(0), action.code_after)
+            action.applied = True
+            action.success = True
+            actions.append(action)
+
+            # Añadir import si es necesario
+            if pattern.get("requires_import") and pattern["requires_import"] not in fixed_code:
+                fixed_code = pattern["requires_import"] + fixed_code
+
+        # Fix: shell=True -> shell=False
+        pattern = self.repair_patterns["shell_true_to_false"]
+        matches = list(re.finditer(pattern["pattern"], fixed_code))
+        for match in matches:
+            action = RepairAction(
+                strategy=RepairStrategy.SECURITY_FIX,
+                description="Cambiar shell=True a shell=False",
+                code_before=match.group(0),
+                code_after=pattern["fix"](match),
+                confidence=pattern["confidence"],
+            )
+            fixed_code = fixed_code.replace(match.group(0), action.code_after)
+            action.applied = True
+            action.success = True
+            actions.append(action)
+
+        return fixed_code, actions
+
+    def _apply_type_hint_fixes(self, code: str, test_report) -> Tuple[str, List[RepairAction]]:
         """Aplica fixes de type hints"""
-        actions: List[RepairAction] = []
+        actions = []
         fixed_code = code
 
         try:
@@ -508,10 +534,7 @@ _repair_workshop: Optional[SelfRepairWorkshop] = None
 
 
 def get_repair_workshop(
-    testing_lab: Optional["AdvancedTestingLab"] = None, 
-    code_generator: Optional["CodeGenerator"] = None, 
-    project_analyzer: Optional["ProjectAnalyzer"] = None, 
-    telemetry: Optional["TelemetrySystem"] = None
+    testing_lab=None, code_generator=None, project_analyzer=None, telemetry=None
 ) -> SelfRepairWorkshop:
     """
     Obtiene instancia singleton del Self-Repair Workshop

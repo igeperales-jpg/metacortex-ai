@@ -537,7 +537,7 @@ class MilitaryGradeMLPipeline:
         logger.info(f"   Cognitive Agent: {'✓' if 'cognitive_agent' in self.symbiotic_connections else '✗'}")
         logger.info(f"   Military Features: {'✓' if self.enable_circuit_breaker else '✗'}")
         logger.info(f"   Conexiones Simbióticas: {self.metrics['neural_connections_active']}")
-        logger.info(f"   Modo perpetuo: {'✓' if self.enable_perpetual_mode else '✗'}")
+        logger.info(f"   Modo perpetuo: {'✓' if enable_perpetual_mode else '✗'}")
 
         # Iniciar modo perpetuo si está habilitado
         if self.enable_perpetual_mode:
@@ -921,7 +921,7 @@ class MilitaryGradeMLPipeline:
         logger.info(f"   Neural Network: {'✓' if self.neural_network else '✗'}")
         logger.info(f"   Memory System: {'✓' if self.memory else '✗'}")
         logger.info(f"   Cache: {'✓' if self.cache else '✗'}")
-        logger.info(f"   Modo perpetuo: {'✓' if self.enable_perpetual_mode else '✗'}")
+        logger.info(f"   Modo perpetuo: {'✓' if enable_perpetual_mode else '✗'}")
         logger.info(f"   Modelos: {self.models_dir}")
         logger.info(f"   Datos: {self.data_dir}")
 

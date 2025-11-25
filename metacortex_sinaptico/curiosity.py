@@ -33,22 +33,29 @@ diseña experimentos para validarlas, y optimiza continuamente el balance
 entre exploration (descubrir) y exploitation (aprovechar conocimiento).
 La integración con BDI convierte curiosidad en deseos intrínsecos.
 """
-from __future__ import annotations
 import logging
+
+logger = logging.getLogger(__name__)
+
+
+from __future__ import annotations
+
 import time
 import math
-import random
 from typing import Dict, List, Any, Optional, Tuple, Set, TYPE_CHECKING
 from dataclasses import dataclass, field
 from collections import defaultdict
 
-from .utils import setup_logging
-
 if TYPE_CHECKING:
     from neural_symbiotic_network import MetacortexNeuralSymbioticNetworkV2
 
+from .utils import setup_logging
+import random
+import random
+import random
+import random
+import random
 
-logger = logging.getLogger(__name__)
 logger = setup_logging()
 
 

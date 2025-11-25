@@ -19,18 +19,33 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
-.mypy_cache/
-.dmypy.json
-dmypy.json
 
 # Virtual Environment
-.venv/
 venv/
 ENV/
 env/
 
-# IDEs
+# Machine Learning Models (archivos generados automáticamente)
+ml_models/*.pkl
+ml_models/*.json
+
+# Logs
+logs/
+*.log
+metacortex_main.log
+
+# PID files (archivos de procesos, regenerados en cada inicio)
+pid/*.pid
+
+# Databases
+*.sqlite
+*.db
+dump.rdb
+
+# Environment variables con secretos
+.env
+
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -41,29 +56,5 @@ env/
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-logs/
-
-# Databases
-*.sqlite
-*.sqlite3
-*.db
+# ChromaDB
 chromadb/
-
-# Models
-ml_models/
-
-# Archives
-.metacortex_archives/
-
-# Test coverage
-.coverage
-htmlcov/
-
-# Jupyter
-.ipynb_checkpoints
-
-# Environment variables
-.env
-.env.local

@@ -27,15 +27,14 @@ Fecha: 2 noviembre 2025
 Version: 2.0 - Truly Decentralized
 """
 
-import logging
 import hashlib
+import logging
 import secrets
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Set
+from datetime import datetime
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -542,32 +541,3 @@ class AutonomousResourceNetwork:
 def get_autonomous_network(project_root: Path) -> AutonomousResourceNetwork:
     """Factory function"""
     return AutonomousResourceNetwork(project_root)
-
-
-# ============================================================================
-# GLOBAL INSTANCE FOR NEURAL NETWORK INTEGRATION
-# ============================================================================
-
-_global_autonomous_network: Optional[AutonomousResourceNetwork] = None
-
-
-def get_autonomous_resource_network() -> AutonomousResourceNetwork:
-    """
-    Obtiene la instancia global del Autonomous Resource Network.
-    Se inicializa lazy en el primer acceso.
-    
-    Returns:
-        Instancia global de AutonomousResourceNetwork
-    """
-    global _global_autonomous_network
-    if _global_autonomous_network is None:
-        logger.info("🌐 Inicializando Autonomous Resource Network global...")
-        try:
-            project_root = Path.cwd()
-            _global_autonomous_network = get_autonomous_network(project_root)
-            logger.info("✅ Autonomous Resource Network inicializado")
-        except Exception as e:
-            logger.error(f"❌ Error inicializando Autonomous Network: {e}")
-            # Crear instancia mínima
-            _global_autonomous_network = AutonomousResourceNetwork(Path.cwd())
-    return _global_autonomous_network

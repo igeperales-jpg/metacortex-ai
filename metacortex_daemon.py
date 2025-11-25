@@ -1,3 +1,7 @@
+from metacortex_sinaptico.db import MetacortexDB
+from metacortex_sinaptico.divine_protection import create_divine_protection_system
+from metacortex_sinaptico.learning import StructuralLearning
+from metacortex_sinaptico.memory import MemorySystem
 #!/usr/bin/env python3
 """
 🔮 METACORTEX DAEMON v4.0 - MILITARY GRADE ORCHESTRATION SYSTEM
@@ -69,13 +73,30 @@ Fecha: 25 octubre 2025
 Versión: 4.0 - MILITARY GRADE EVOLUTION
 Clasificación: TACTICAL-ADVANCED
 """
-# ==============================================================================
-# 1. STANDARD LIBRARY IMPORTS
-# ==============================================================================
+
+# 🔧 FIX PANDAS CIRCULAR IMPORT (ANTES DE CUALQUIER IMPORT)
+# Deshabilitar la inicialización problemática de pandas C extensions
+import os
+import sys
+from pathlib import Path
+
+# 🔥 SOLUCIÓN CRÍTICA: Aumentar límite de recursión GLOBALMENTE
+# Problema: sentence-transformers + PyTorch + pathlib causan deep recursion
+# Solución: Límite muy alto ANTES de cualquier import complejo
+sys.setrecursionlimit(100000)  # 100K - suficiente para cualquier caso
+
+# Configurar rutas PRIMERO
+DAEMON_ROOT = Path(__file__).parent
+if str(DAEMON_ROOT) not in sys.path:
+    sys.path.insert(0, str(DAEMON_ROOT))
+
+# Prevenir circular import de pandas configurando variables ANTES de importar
+os.environ['PANDAS_WARN_ON_C_EXTENSION_IMPORT'] = '0'
+
+# Ahora sí, imports normales
 import atexit
 import json
 import logging
-import multiprocessing as mp
 import os
 import signal
 import socket
@@ -84,7 +105,6 @@ import sys
 import threading
 import time
 import traceback
-import types
 import uuid
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -92,69 +112,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from queue import Empty
 from threading import Event, RLock
-from typing import Any, Dict, List
-
-# ==============================================================================
-# 2. THIRD-PARTY IMPORTS
-# ==============================================================================
-try:
-    import psutil
-except ImportError:
-    print("⚠️  psutil no encontrado. Instalando...")
-    # Use subprocess defined in standard library imports
-    subprocess.run([sys.executable, "-m", "pip", "install", "psutil"], check=True)
-    import psutil
-
-# ==============================================================================
-# 3. PROJECT-SPECIFIC IMPORTS
-# ==============================================================================
-from single_instance import ensure_single_instance
-from unified_logging import setup_unified_logging
-from cognitive_integration import get_cognitive_bridge
-from metacortex_sinaptico.bdi import BDISystem
-from metacortex_sinaptico.db import MetacortexDB
-from metacortex_sinaptico.divine_protection import create_divine_protection_system
-from metacortex_sinaptico.learning import StructuralLearning
-from metacortex_sinaptico.memory import MemorySystem
-from metacortex_sinaptico.planning import MultiHorizonPlanner
-from neural_symbiotic_network import get_neural_network
-from unified_memory_layer import UnifiedMemoryLayer
-from programming_agent import get_programming_agent
-from ml_auto_trainer import get_auto_trainer
-from ml_cognitive_bridge import get_ml_cognitive_bridge
-from ml_data_collector import get_data_collector
-from ml_model_adapter import get_model_adapter
-from ml_pipeline import get_ml_pipeline
-
-# Optional import for Apple Silicon optimizations
-try:
-    from mps_config import configure_mps_system, is_apple_silicon
-except ImportError:
-    print("⚠️  mps_config no encontrado. Las optimizaciones de Apple Silicon estarán deshabilitadas.")
-    def is_apple_silicon() -> bool:
-        return False
-    def configure_mps_system() -> Dict[str, Any]:
-        return {}
-
-# ==============================================================================
-# 4. CRITICAL SYSTEM CONFIGURATION (Must be after imports)
-# ==============================================================================
-
-# Aumentar límite de recursión para evitar errores con sentence-transformers
-sys.setrecursionlimit(100000)
-
-# Añadir el directorio raíz al path para asegurar imports consistentes
-DAEMON_ROOT = Path(__file__).parent
-if str(DAEMON_ROOT) not in sys.path:
-    sys.path.insert(0, str(DAEMON_ROOT))
-
-# Prevenir circular import de pandas
-os.environ['PANDAS_WARN_ON_C_EXTENSION_IMPORT'] = '0'
+from typing import Any
 
 # Cargar variables de entorno
-env_file = DAEMON_ROOT / ".env"
+env_file = Path(__file__).parent / ".env"
 if env_file.exists():
     with open(env_file) as f:
         for line in f:
@@ -164,32 +126,49 @@ if env_file.exists():
                 os.environ[key.strip()] = value.strip()
     print("✅ Variables de entorno cargadas")
 
+# Instalar dependencias críticas PRIMERO
+try:
+    import psutil
+except ImportError:
+    print("⚠️ Instalando psutil...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "psutil"], check=True)
+    import psutil
+
 # Crear directorio de logs
 LOG_DIR = DAEMON_ROOT / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
-# Configurar logging unificado
+from unified_logging import setup_unified_logging
+from cognitive_integration import get_cognitive_bridge
+import multiprocessing as mp
+from queue import Empty
+from programming_agent import get_programming_agent
+import time
+import time
+import time
+from metacortex_sinaptico.planning import MultiHorizonPlanner
+from single_instance import ensure_single_instance
+
 logger = setup_unified_logging(
     name="DAEMON_MILITARY",
     log_file=str(LOG_DIR / "metacortex_daemon_military.log"),
     level=logging.INFO,
 )
 
-# Configurar Apple Silicon (MPS) si está disponible
-if is_apple_silicon():
-    logger.info("🍎 Detectado Apple Silicon - configurando MPS...")
-    try:
+# 🍎 Configurar MPS DESPUÉS de logging (evita conflictos de import)
+try:
+    from mps_config import configure_mps_system, is_apple_silicon
+
+    if is_apple_silicon():
+        logger.info("🍎 Detectado Apple Silicon - configurando MPS...")
         mps_status = configure_mps_system()
         success = sum(mps_status.values())
         total = len(mps_status)
         logger.info(f"✅ MPS: {success}/{total} componentes configurados")
-    except Exception as e:
-        logger.warning(f"⚠️ MPS config error: {e}")
+except Exception as e:
+    logger.warning(f"⚠️ MPS config error: {e}")
 
 
-# ==============================================================================
-# 5. DATA CLASSES AND ENUMS
-# ==============================================================================
 class ComponentState(Enum):
     """Estados de componentes militares"""
 
@@ -352,8 +331,274 @@ class MetacortexMilitaryDaemon:
         self.state_file = DAEMON_ROOT / "logs" / "daemon_military_state.json"
         self.write_pid()
 
-        # Carga de componentes principales
-        self._load_core_components()
+        # Neural network - LAZY LOADING (se carga en run())
+        self.neural_network = None
+        self._neural_network_loaded = False
+        logger.info("ℹ️ Neural Network: LAZY LOADING (se cargará en run())")
+
+        # Cognitive bridge - LAZY LOADING
+        self.cognitive_bridge = None
+        self.cognitive_bridge_initializing = False
+        self.cognitive_bridge_failed = False
+
+        # 🆕 2026: Cognitive Agent Pool - LAZY LOADING
+        self.agent_pool = None
+        self._agent_pool_loaded = False
+        logger.info("ℹ️ Cognitive Agent Pool: LAZY LOADING (se cargará en run())")
+
+        # ML Pipeline - LAZY LOADING
+        self.ml_pipeline = None
+        self._ml_pipeline_loaded = False
+        logger.info("ℹ️ ML Pipeline: LAZY LOADING (se cargará en run())")
+
+        # Auto-Trainer
+        self.auto_trainer = None
+        try:
+            from ml_auto_trainer import get_auto_trainer
+
+            self.auto_trainer = get_auto_trainer(
+                retraining_interval_hours=24, min_samples_threshold=100, enable_auto_collection=True
+            )
+            self.auto_trainer.start()
+            logger.info("✅ Auto-Trainer inicializado")
+        except Exception as e:
+            logger.error(f"❌ Auto-Trainer: {e}")
+
+        # 🆕 2026: Auto-Repair System
+        self.auto_repair = None
+        self.last_auto_repair = datetime.now()
+        self.auto_repair_interval = timedelta(hours=1)  # Cada 1 hora
+        self.auto_repair_health_threshold = 85.0  # Trigger si health < 85%
+        try:
+            from system_auto_repair import get_auto_repair
+
+            self.auto_repair = get_auto_repair(
+                project_root=DAEMON_ROOT, logs_dir=DAEMON_ROOT / "logs", auto_repair_enabled=True
+            )
+            logger.info("✅ Auto-Repair System inicializado")
+            logger.info(f"   Intervalo: {self.auto_repair_interval.total_seconds() / 3600:.1f}h")
+            logger.info(f"   Health threshold: {self.auto_repair_health_threshold}%")
+        except Exception as e:
+            logger.error(f"❌ Auto-Repair: {e}")
+
+        # 🆕 2026: Disk Space Manager
+        self.disk_manager = None
+        self.last_disk_cleanup = datetime.now()
+        self.disk_cleanup_interval = timedelta(hours=6)  # Cada 6 horas
+        try:
+            from disk_space_manager import get_disk_space_manager
+
+            self.disk_manager = get_disk_space_manager(
+                project_root=DAEMON_ROOT,
+                logs_dir=DAEMON_ROOT / "logs",
+                retention_days=30,
+                max_log_size_mb=10,
+                compression_enabled=True,
+            )
+            logger.info("✅ Disk Space Manager inicializado")
+            logger.info(
+                f"   Intervalo limpieza: {self.disk_cleanup_interval.total_seconds() / 3600:.1f}h"
+            )
+            logger.info("   Retención: 30 días")
+        except Exception as e:
+            logger.error(f"❌ Disk Space Manager: {e}")
+
+        # 💾 2026: Distributed Storage Manager V2.0 - Auto-detección de TODOS los discos
+        # LAZY LOADING: Se carga en run() para evitar bloquear __init__() con setup inicial
+        self.distributed_storage = None
+        self._distributed_storage_loaded = False
+        self.last_storage_sync = datetime.now()
+        self.storage_sync_interval = timedelta(hours=1)  # Sincronizar cada 1 hora
+        self.storage_initial_setup_done = False
+        logger.info("ℹ️ Distributed Storage Manager: LAZY LOADING (se cargará en run())")
+        logger.info("   Setup inicial se ejecutará en background para no bloquear daemon")
+
+        # 🔌 2026: Port Monitor - Monitoreo continuo de puertos y procesos
+        self.port_monitor_enabled = True
+        self.last_port_monitoring = datetime.now()
+        self.port_monitoring_interval = timedelta(minutes=5)  # Cada 5 minutos
+        self.port_monitor_auto_fix = True
+        self.port_health_history: dict[int, list[bool]] = defaultdict(list)
+        self.critical_ports = {
+            6379: "Redis",
+            8000: "Web Interface",
+            5000: "API Server",
+            8080: "Dashboard",
+            11434: "Ollama",
+            9090: "Telemetry",
+        }
+        logger.info("✅ Port Monitor integrado")
+        logger.info(
+            f"   Intervalo monitoreo: {self.port_monitoring_interval.total_seconds() / 60:.1f}min"
+        )
+        logger.info(f"   Puertos críticos: {len(self.critical_ports)}")
+        logger.info(f"   Auto-fix: {'ENABLED' if self.port_monitor_auto_fix else 'DISABLED'}")
+
+        # Auto-Git Manager
+        self.auto_git_manager = None
+        try:
+            from auto_git_manager import get_auto_git_manager
+
+            self.auto_git_manager = get_auto_git_manager(repo_root=str(DAEMON_ROOT), logger=logger)
+            logger.info("✅ Auto-Git Manager inicializado")
+        except Exception as e:
+            logger.warning(f"⚠️ Auto-Git Manager: {e}")
+
+        # 🆕 2026: TELEMETRY SYSTEM (métricas militares)
+        self.telemetry_system = None
+        try:
+            from telemetry_system import MetacortexTelemetrySystem
+
+            self.telemetry_system = MetacortexTelemetrySystem(
+                service_name="metacortex_daemon", enable_prometheus=True, enable_custom_export=True
+            )
+            logger.info("✅ Telemetry System inicializado")
+        except Exception as e:
+            logger.warning(f"⚠️ Telemetry System: {e}")
+
+        # 🆕 2026: LLM INTEGRATION (inteligencia de lenguaje)
+        self.llm_integration = None
+        try:
+            from llm_integration import MetacortexLLM
+
+            self.llm_integration = MetacortexLLM()
+            logger.info("✅ LLM Integration inicializado")
+        except Exception as e:
+            logger.warning(f"⚠️ LLM Integration: {e}")
+
+        # 🆕 2026: MULTIMODAL PROCESSOR (PDF, imágenes, audio, video)
+        self.multimodal_processor = None
+        try:
+            from multimodal_processor import MultiModalProcessor
+
+            self.multimodal_processor = MultiModalProcessor(cache_enabled=True)
+            logger.info("✅ Multimodal Processor inicializado")
+        except Exception as e:
+            logger.warning(f"⚠️ Multimodal Processor: {e}")
+
+        # 🆕 2026: ML COGNITIVE BRIDGE (integra ML + Cognitive)
+        self.ml_cognitive_bridge = None
+        try:
+            from ml_cognitive_bridge import get_ml_cognitive_bridge
+
+            self.ml_cognitive_bridge = get_ml_cognitive_bridge()
+            logger.info("✅ ML Cognitive Bridge inicializado")
+        except Exception as e:
+            logger.warning(f"⚠️ ML Cognitive Bridge: {e}")
+
+        # 🆕 2026: ML DATA COLLECTOR (recolecta datos para training)
+        self.ml_data_collector = None
+        try:
+            from ml_data_collector import get_data_collector
+
+            self.ml_data_collector = get_data_collector(data_dir="ml_data")
+            logger.info("✅ ML Data Collector inicializado")
+        except Exception as e:
+            logger.warning(f"⚠️ ML Data Collector: {e}")
+
+        # 🆕 2026: ML MODEL ADAPTER (adapta features dinámicamente)
+        self.ml_model_adapter = None
+        try:
+            from ml_model_adapter import get_model_adapter
+
+            self.ml_model_adapter = get_model_adapter(models_dir="ml_models")
+            logger.info("✅ ML Model Adapter inicializado")
+        except Exception as e:
+            logger.warning(f"⚠️ ML Model Adapter: {e}")
+
+        # 🆕 2026: UNIFIED MEMORY LAYER (memoria universal compartida)
+        self.unified_memory = None
+        try:
+            from unified_memory_layer import UnifiedMemoryLayer
+
+            self.unified_memory = UnifiedMemoryLayer(
+                db_path=str(DAEMON_ROOT / "metacortex.sqlite"),
+                enable_semantic_search=True,
+                enable_knowledge_graph=True,
+                working_memory_capacity=200,
+                auto_sync_interval=300,
+            )
+            logger.info("✅ Unified Memory Layer inicializado")
+        except Exception as e:
+            logger.warning(f"⚠️ Unified Memory Layer: {e}")
+
+        # 🆕 2026: VERIFICATION SYSTEM (auto-validación continua)
+        self.system_verifier = None
+        try:
+            from verify_complete_system import CompleteSystemVerifier
+
+            self.system_verifier = CompleteSystemVerifier(root_path=str(DAEMON_ROOT))
+            logger.info("✅ Complete System Verifier inicializado")
+        except Exception as e:
+            logger.warning(f"⚠️ System Verifier: {e}")
+
+        # 🚀 2026: EXPONENTIAL CAPABILITY DISCOVERY ENGINE
+        self.exponential_engine = None
+        self.last_capability_discovery = datetime.now()
+        self.capability_discovery_interval = timedelta(minutes=5)  # Descubrir cada 5 min
+        self.capability_stats_log_interval = timedelta(hours=1)  # Log stats cada 1h
+        self.last_stats_log = datetime.now()
+        try:
+            from exponential_capability_engine import get_exponential_engine
+
+            self.exponential_engine = get_exponential_engine(project_root=DAEMON_ROOT)
+            logger.info("✅ Exponential Capability Engine inicializado")
+            logger.info(
+                f"   Intervalo descubrimiento: {self.capability_discovery_interval.total_seconds() / 60:.1f}min"
+            )
+
+            # Descubrimiento inicial en background
+            logger.info("🔍 Ejecutando descubrimiento inicial de agentes y capacidades...")
+            self.executor.submit(self._initial_capability_discovery)
+        except Exception as e:
+            logger.error(f"❌ Exponential Capability Engine: {e}")
+
+        # 🎯 2026: METACORTEX ORCHESTRATOR - Orquestación unificada de agentes
+        # NOTA: El orchestrator se ejecuta como proceso SEPARADO (ver metacortex_master.sh)
+        # NO debe cargarse en __init__() porque es pesado y bloquea el daemon
+        self.orchestrator = None
+        self.last_orchestration_cycle = datetime.now()
+        self.orchestration_interval = timedelta(minutes=15)  # Ciclo cada 15 min
+        logger.info("ℹ️ Orchestrator se ejecuta como proceso separado")
+        logger.info("   NO se carga en daemon para evitar bloqueos")
+        
+        # COMENTADO: El orchestrator es un proceso separado, NO debe cargarse aquí
+        # try:
+        #     from metacortex_orchestrator import create_orchestrator
+        #     self.orchestrator = create_orchestrator(str(DAEMON_ROOT))
+        #     logger.info("✅ Metacortex Orchestrator inicializado")
+        #     logger.info("   Agentes disponibles: integration, programming, search, evolution")
+        #     logger.info(
+        #         f"   Intervalo orquestación: {self.orchestration_interval.total_seconds() / 60:.1f}min"
+        #     )
+        # except Exception as e:
+        #     logger.error(f"❌ Orchestrator: {e}")
+        #     logger.error("   El daemon continuará sin orquestación de agentes")
+
+        # 🔧 2026: IMPORT AUTO-HEALER - Auto-reparación de dependencias
+        self.import_healer = None
+        self.last_healing_scan = datetime.now()
+        self.healing_scan_interval = timedelta(hours=12)  # Scan cada 12 horas
+        try:
+            from import_auto_healer import get_import_healer
+
+            self.import_healer = get_import_healer(project_root=DAEMON_ROOT, auto_install=True)
+            logger.info("✅ Import Auto-Healer inicializado")
+            logger.info(
+                f"   Intervalo scan: {self.healing_scan_interval.total_seconds() / 3600:.1f}h"
+            )
+            logger.info("   Auto-install: ENABLED")
+        except Exception as e:
+            logger.error(f"❌ Import Auto-Healer: {e}")
+
+        # ✨ 2026: DIVINE PROTECTION SYSTEM - Protección de perseguidos por la fe
+        # LAZY LOADING: Se carga en run() para evitar bloquear __init__()
+        self.divine_protection = None
+        self._divine_protection_loaded = False
+        self.last_protection_cycle = datetime.now()
+        self.protection_cycle_interval = timedelta(minutes=30)  # Ciclo cada 30 min
+        logger.info("ℹ️ Divine Protection System: LAZY LOADING (se cargará en run())")
+        logger.info("📖 'He who dwells in the shelter of the Most High' - Psalm 91:1")
 
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -364,266 +609,11 @@ class MetacortexMilitaryDaemon:
         logger.info(f"🆔 PID: {os.getpid()}")
         logger.info("✅ Military Daemon inicializado")
 
-    def _load_core_components(self):
-        """Carga todos los componentes del sistema de forma robusta."""
-        logger.info("🛠️  Cargando componentes del sistema...")
-
-        # Neural network
-        try:
-            self.neural_network = get_neural_network()
-            self.neural_network.register_module("military_daemon", self)
-            logger.info("✅ Neural Network inicializada")
-        except Exception as e:
-            logger.error(f"❌ Neural Network: {e}")
-            self.neural_network = None
-
-        # Cognitive bridge
-        try:
-            self.cognitive_bridge = get_cognitive_bridge(str(DAEMON_ROOT))
-            logger.info("✅ Cognitive Bridge inicializado")
-        except Exception as e:
-            logger.error(f"❌ Cognitive Bridge: {e}")
-            self.cognitive_bridge = None
-
-        # Cognitive Agent Pool
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.agent_pool = get_cognitive_agent_pool()
-        #     self.agent_pool.preload_async()
-        #     logger.info("✅ Cognitive Agent Pool inicializado")
-        # except Exception as e:
-        #     logger.error(f"❌ Agent Pool: {e}")
-        #     self.agent_pool = None
-        self.agent_pool = None
-
-
-        # ML Pipeline
-        try:
-            self.ml_pipeline = get_ml_pipeline(
-                enable_perpetual_mode=True, enable_continuous_learning=True
-            )
-            logger.info("✅ ML Pipeline inicializado")
-        except Exception as e:
-            logger.error(f"❌ ML Pipeline: {e}")
-            self.ml_pipeline = None
-
-        # Auto-Trainer
-        try:
-            self.auto_trainer = get_auto_trainer(
-                retraining_interval_hours=24, min_samples_threshold=100, enable_auto_collection=True
-            )
-            self.auto_trainer.start()
-            logger.info("✅ Auto-Trainer inicializado")
-        except Exception as e:
-            logger.error(f"❌ Auto-Trainer: {e}")
-            self.auto_trainer = None
-
-        # Auto-Repair System
-        self.last_auto_repair = datetime.now()
-        self.auto_repair_interval = timedelta(hours=1)
-        self.auto_repair_health_threshold = 85.0
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.auto_repair = get_auto_repair(
-        #         project_root=DAEMON_ROOT, logs_dir=DAEMON_ROOT / "logs", auto_repair_enabled=True
-        #     )
-        #     logger.info("✅ Auto-Repair System inicializado")
-        # except Exception as e:
-        #     logger.error(f"❌ Auto-Reparar: {e}")
-        #     self.auto_repair = None
-        self.auto_repair = None
-
-        # Disk Space Manager
-        self.last_disk_cleanup = datetime.now()
-        self.disk_cleanup_interval = timedelta(hours=6)
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.disk_manager = get_disk_space_manager(
-        #         project_root=DAEMON_ROOT,
-        #         logs_dir=DAEMON_ROOT / "logs",
-        #         retention_days=30,
-        #         max_log_size_mb=10,
-        #         compression_enabled=True,
-        #     )
-        #     logger.info("✅ Disk Space Manager inicializado")
-        # except Exception as e:
-        #     logger.error(f"❌ Disk Space Manager: {e}")
-        #     self.disk_manager = None
-        self.disk_manager = None
-
-        # Distributed Storage Manager V2.0
-        self.last_storage_sync = datetime.now()
-        self.storage_sync_interval = timedelta(hours=1)
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.distributed_storage = DistributedStorageManagerV2(
-        #         config_file="storage_config_v2.json",
-        #         auto_detect_volumes=True,
-        #         min_disk_size_tb=3.0,
-        #         disk_usage_threshold=85.0,
-        #         enable_auto_migration=True
-        #     )
-        #     self.executor.submit(self._initialize_distributed_storage)
-        #     logger.info("✅ Distributed Storage Manager inicializado (setup en background)")
-        # except Exception as e:
-        #     logger.error(f"❌ Distributed Storage Manager: {e}")
-        #     self.distributed_storage = None
-        self.distributed_storage = None
-
-        # Port Monitor
-        self.port_monitor_enabled = True
-        self.last_port_monitoring = datetime.now()
-        self.port_monitoring_interval = timedelta(minutes=5)
-        self.port_monitor_auto_fix = True
-        self.port_health_history: Dict[int, List[bool]] = defaultdict(list)
-        self.critical_ports = {
-            6379: "Redis", 8000: "Web Interface", 5000: "API Server",
-            8080: "Dashboard", 11434: "Ollama", 9090: "Telemetry",
-        }
-        logger.info("✅ Port Monitor integrado")
-
-        # Auto-Git Manager
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.auto_git_manager = get_auto_git_manager(repo_root=str(DAEMON_ROOT), logger=logger)
-        #     logger.info("✅ Auto-Git Manager inicializado")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ Auto-Git Manager: {e}")
-        #     self.auto_git_manager = None
-        self.auto_git_manager = None
-
-        # TELEMETRY SYSTEM
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.telemetry_system = MetacortexTelemetrySystem(
-        #         service_name="metacortex_daemon", enable_prometheus=True, enable_custom_export=True
-        #     )
-        #     logger.info("✅ Telemetry System inicializado")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ Telemetry System: {e}")
-        #     self.telemetry_system = None
-        self.telemetry_system = None
-
-        # LLM INTEGRATION
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.llm_integration = MetacortexLLM()
-        #     logger.info("✅ LLM Integration inicializado")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ LLM Integration: {e}")
-        #     self.llm_integration = None
-        self.llm_integration = None
-
-        # MULTIMODAL PROCESSOR
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.multimodal_processor = MultiModalProcessor(cache_enabled=True)
-        #     logger.info("✅ Multimodal Processor inicializado")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ Multimodal Processor: {e}")
-        #     self.multimodal_processor = None
-        self.multimodal_processor = None
-
-        # ML COGNITIVE BRIDGE
-        try:
-            self.ml_cognitive_bridge = get_ml_cognitive_bridge()
-            logger.info("✅ ML Cognitive Bridge inicializado")
-        except Exception as e:
-            logger.warning(f"⚠️ ML Cognitive Bridge: {e}")
-            self.ml_cognitive_bridge = None
-
-        # ML DATA COLLECTOR
-        try:
-            self.ml_data_collector = get_data_collector(data_dir="ml_data")
-            logger.info("✅ ML Data Collector inicializado")
-        except Exception as e:
-            logger.warning(f"⚠️ ML Data Collector: {e}")
-            self.ml_data_collector = None
-
-        # ML MODEL ADAPTER
-        try:
-            self.ml_model_adapter = get_model_adapter(models_dir="ml_models")
-            logger.info("✅ ML Model Adapter inicializado")
-        except Exception as e:
-            logger.warning(f"⚠️ ML Model Adapter: {e}")
-            self.ml_model_adapter = None
-
-        # UNIFIED MEMORY LAYER
-        try:
-            # FIX: Constructor de UnifiedMemoryLayer no acepta estos parámetros.
-            # La configuración se debe hacer en los componentes que utiliza por debajo.
-            self.unified_memory = UnifiedMemoryLayer()
-            logger.info("✅ Unified Memory Layer inicializado")
-        except Exception as e:
-            logger.warning(f"⚠️ Unified Memory Layer: {e}")
-            self.unified_memory = None
-
-        # VERIFICATION SYSTEM
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.system_verifier = CompleteSystemVerifier(root_path=str(DAEMON_ROOT))
-        #     logger.info("✅ Complete System Verifier inicializado")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ System Verifier: {e}")
-        #     self.system_verifier = None
-        self.system_verifier = None
-
-        # EXPONENTIAL CAPABILITY DISCOVERY ENGINE
-        self.last_capability_discovery = datetime.now()
-        self.capability_discovery_interval = timedelta(minutes=5)
-        self.capability_stats_log_interval = timedelta(hours=1)
-        self.last_stats_log = datetime.now()
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.exponential_engine = get_exponential_engine(project_root=DAEMON_ROOT)
-        #     self.executor.submit(self._initial_capability_discovery)
-        #     logger.info("✅ Exponential Capability Engine inicializado (descubrimiento en background)")
-        # except Exception as e:
-        #     logger.error(f"❌ Exponential Capability Engine: {e}")
-        #     self.exponential_engine = None
-        self.exponential_engine = None
-
-        # METACORTEX ORCHESTRATOR
-        self.last_orchestration_cycle = datetime.now()
-        self.orchestration_interval = timedelta(minutes=15)
-        logger.info("ℹ️ Orchestrator se ejecuta como proceso separado y no se carga aquí.")
-        self.orchestrator = None
-
-        # IMPORT AUTO-HEALER
-        self.last_healing_scan = datetime.now()
-        self.healing_scan_interval = timedelta(hours=12)
-        # TODO: FIX MISSING MODULE
-        # try:
-        #     self.import_healer = get_import_healer(project_root=DAEMON_ROOT, auto_install=True)
-        #     logger.info("✅ Import Auto-Healer inicializado")
-        # except Exception as e:
-        #     logger.error(f"❌ Import Auto-Healer: {e}")
-        #     self.import_healer = None
-        self.import_healer = None
-
-        # DIVINE PROTECTION SYSTEM
-        self.last_protection_cycle = datetime.now()
-        self.protection_cycle_interval = timedelta(minutes=30)
-        try:
-            db = MetacortexDB()
-            bdi_system = BDISystem()
-            planner = MultiHorizonPlanner()
-            memory_system = MemorySystem(db=db)
-            learning_system = StructuralLearning()
-            self.divine_protection = create_divine_protection_system(
-                db=db, bdi_system=bdi_system, planner=planner,
-                memory=memory_system, learning=learning_system,
-            )
-            logger.info("✅ Divine Protection System inicializado")
-        except Exception as e:
-            logger.error(f"❌ Divine Protection System: {e}")
-            self.divine_protection = None
-
     def write_pid(self):
         with open(self.pid_file, "w") as f:
             f.write(str(os.getpid()))
 
-    def signal_handler(self, signum: int, frame: types.FrameType | None):
+    def signal_handler(self, signum, frame):
         logger.info(f"⚠️ Señal {signum} recibida")
         self.shutdown()
 
@@ -748,8 +738,8 @@ class MetacortexMilitaryDaemon:
                 logger.error(f"Error: {e}", exc_info=True)
                 try:
                     component["process"].kill()
-                except Exception as kill_error:
-                    logger.error(f"Error: {kill_error}", exc_info=True)
+                except Exception as e:
+                    logger.error(f"Error: {e}", exc_info=True)
                     pass
 
             if attempt > 1:
@@ -777,51 +767,22 @@ class MetacortexMilitaryDaemon:
         python_cmd = str(venv_python) if venv_python.exists() else sys.executable
 
         # Web Interface (puerto 8000) - incluye dashboard en /api/dashboard/metrics
-        web_server_file = DAEMON_ROOT / "web_interface" / "server.py"
-        if web_server_file.exists():
-            self.start_component_with_circuit_breaker(
-                "web_server",
-                [python_cmd, str(web_server_file)],
-                cwd=DAEMON_ROOT,
-                priority=PriorityLevel.HIGH,
-            )
-            logger.info("✅ Web Interface service iniciado (puerto 8000)")
-        else:
-            logger.warning(f"⚠️ Web Interface no encontrado: {web_server_file}")
-
-        # Neural Network Service (puerto 8001)
-        neural_service_file = DAEMON_ROOT / "neural_network_service" / "server.py"
-        if neural_service_file.exists():
-            self.start_component_with_circuit_breaker(
-                "neural_network_service",
-                [python_cmd, str(neural_service_file)],
-                cwd=DAEMON_ROOT,
-                priority=PriorityLevel.HIGH,
-            )
-            logger.info("✅ Neural Network Service iniciado (puerto 8001)")
-        else:
-            logger.warning(f"⚠️ Neural Network Service no encontrado: {neural_service_file}")
-
-        # Telemetry Service (puerto 9090)
-        telemetry_service_file = DAEMON_ROOT / "telemetry_service" / "server.py"
-        if telemetry_service_file.exists():
-            self.start_component_with_circuit_breaker(
-                "telemetry_service",
-                [python_cmd, str(telemetry_service_file)],
-                cwd=DAEMON_ROOT,
-                priority=PriorityLevel.MEDIUM,
-            )
-            logger.info("✅ Telemetry Service iniciado (puerto 9090)")
-        else:
-            logger.warning(f"⚠️ Telemetry Service no encontrado: {telemetry_service_file}")
-
-        # Metacortex Orchestrator
         self.start_component_with_circuit_breaker(
-            "metacortex_orchestrator",
-            [python_cmd, "metacortex_orchestrator.py"],
+            "web_server",
+            [python_cmd, "web_interface/server.py"],
             cwd=DAEMON_ROOT,
-            priority=PriorityLevel.CRITICAL,
+            priority=PriorityLevel.HIGH,
         )
+
+        # Neural Network
+        neural_file = DAEMON_ROOT / "neural_symbiotic_network.py"
+        if neural_file.exists():
+            self.start_component_with_circuit_breaker(
+                "neural_network",
+                [python_cmd, "neural_symbiotic_network.py", "--daemon"],
+                cwd=DAEMON_ROOT,
+                priority=PriorityLevel.CRITICAL,
+            )
 
         logger.info(f"✅ {len(self.components)} componentes iniciados")
 
@@ -869,39 +830,38 @@ class MetacortexMilitaryDaemon:
                             logger.error(f"❌ Error en log de estadísticas: {e}")
 
                     # 🆕 2026: Auto-Repair periódico
-                    # TODO: FIX MISSING MODULE
-                    # if self.auto_repair and (
-                    #     now - self.last_auto_repair >= self.auto_repair_interval
-                    # ):
-                    #     logger.info("🔧 Ciclo de Auto-Repair...")
+                    if self.auto_repair and (
+                        now - self.last_auto_repair >= self.auto_repair_interval
+                    ):
+                        logger.info("🔧 Ciclo de Auto-Repair...")
 
-                    #     try:
-                    #         diagnosis = self.auto_repair.diagnose_system()
-                    #         health_pct = diagnosis.get("health_percentage", 0)
+                        try:
+                            diagnosis = self.auto_repair.diagnose_system()
+                            health_pct = diagnosis.get("health_percentage", 0)
 
-                    #         logger.info(f"   Health: {health_pct:.1f}%")
+                            logger.info(f"   Health: {health_pct:.1f}%")
 
-                    #         # Trigger auto-repair si health < threshold
-                    #         if health_pct < self.auto_repair_health_threshold:
-                    #             logger.warning(
-                    #                 f"⚠️ Health bajo ({health_pct:.1f}% < {self.auto_repair_health_threshold}%)"
-                    #             )
-                    #             logger.info("🔧 Ejecutando auto-reparación...")
+                            # Trigger auto-repair si health < threshold
+                            if health_pct < self.auto_repair_health_threshold:
+                                logger.warning(
+                                    f"⚠️ Health bajo ({health_pct:.1f}% < {self.auto_repair_health_threshold}%)"
+                                )
+                                logger.info("🔧 Ejecutando auto-reparación...")
 
-                    #             repair_result = self.auto_repair.auto_repair(diagnosis)
+                                repair_result = self.auto_repair.auto_repair(diagnosis)
 
-                    #             if repair_result.get("success"):
-                    #                 logger.info(
-                    #                     f"✅ Auto-repair exitoso: {repair_result.get('repairs_successful', 0)} fixes"
-                    #                 )
-                    #             else:
-                    #                 logger.warning("⚠️ Auto-repair no pudo ejecutar fixes")
-                    #         else:
-                    #             logger.info(f"✅ Sistema saludable ({health_pct:.1f}%)")
+                                if repair_result.get("success"):
+                                    logger.info(
+                                        f"✅ Auto-repair exitoso: {repair_result.get('repairs_successful', 0)} fixes"
+                                    )
+                                else:
+                                    logger.warning("⚠️ Auto-repair no pudo ejecutar fixes")
+                            else:
+                                logger.info(f"✅ Sistema saludable ({health_pct:.1f}%)")
 
-                    #         self.last_auto_repair = now
-                    #     except Exception as e:
-                    #         logger.error(f"❌ Error en Auto-Repair: {e}")
+                            self.last_auto_repair = now
+                        except Exception as e:
+                            logger.error(f"❌ Error en Auto-Repair: {e}")
 
                     # 🔌 2026: Port Monitor - Monitoreo de puertos críticos cada 5 min
                     if self.port_monitor_enabled and (
@@ -916,52 +876,51 @@ class MetacortexMilitaryDaemon:
                             logger.error(f"❌ Error en Port Monitor: {e}")
 
                     # 🆕 2026: Disk Space Manager - Limpieza periódica cada 6h
-                    # TODO: FIX MISSING MODULE
-                    # if self.disk_manager and (
-                    #     now - self.last_disk_cleanup >= self.disk_cleanup_interval
-                    # ):
-                    #     logger.info("🗂️ Ciclo de limpieza de disco...")
+                    if self.disk_manager and (
+                        now - self.last_disk_cleanup >= self.disk_cleanup_interval
+                    ):
+                        logger.info("🗂️ Ciclo de limpieza de disco...")
 
-                    #     try:
-                    #         # Obtener uso de disco antes
-                    #         usage_before = self.disk_manager.get_disk_usage()
-                    #         disk_percent = usage_before.get("disk_percent_used", 0)
+                        try:
+                            # Obtener uso de disco antes
+                            usage_before = self.disk_manager.get_disk_usage()
+                            disk_percent = usage_before.get("disk_percent_used", 0)
 
-                    #         logger.info(f"   Disco usado: {disk_percent:.1f}%")
+                            logger.info(f"   Disco usado: {disk_percent:.1f}%")
 
-                    #         # Ejecutar limpieza si disco >80% o cada 6h
-                    #         if disk_percent > 80 or (
-                    #             now - self.last_disk_cleanup >= self.disk_cleanup_interval
-                    #         ):
-                    #             if disk_percent > 80:
-                    #                 logger.warning(f"⚠️ Disco alto ({disk_percent:.1f}% > 80%)")
+                            # Ejecutar limpieza si disco >80% o cada 6h
+                            if disk_percent > 80 or (
+                                now - self.last_disk_cleanup >= self.disk_cleanup_interval
+                            ):
+                                if disk_percent > 80:
+                                    logger.warning(f"⚠️ Disco alto ({disk_percent:.1f}% > 80%)")
 
-                    #             logger.info("🧹 Ejecutando limpieza automática...")
-                    #             cleanup_result = self.disk_manager.auto_cleanup(dry_run=False)
+                                logger.info("🧹 Ejecutando limpieza automática...")
+                                cleanup_result = self.disk_manager.auto_cleanup(dry_run=False)
 
-                    #             if cleanup_result.get("success", False):
-                    #                 summary = cleanup_result.get("summary", {})
-                    #                 logger.info("✅ Limpieza completada:")
-                    #                 logger.info(
-                    #                     f"   • Espacio liberado: {summary.get('total_space_freed_mb', 0):.2f}MB"
-                    #                 )
-                    #                 logger.info(
-                    #                     f"   • Archivos rotados: {summary.get('files_rotated', 0)}"
-                    #                 )
-                    #                 logger.info(
-                    #                     f"   • Archivos comprimidos: {summary.get('files_compressed', 0)}"
-                    #                 )
-                    #                 logger.info(
-                    #                     f"   • Archivos eliminados: {summary.get('files_deleted', 0)}"
-                    #                 )
-                    #             else:
-                    #                 logger.warning("⚠️ Limpieza de disco no completada")
-                    #         else:
-                    #             logger.info(f"✅ Disco OK ({disk_percent:.1f}%)")
+                                if cleanup_result.get("success", False):
+                                    summary = cleanup_result.get("summary", {})
+                                    logger.info("✅ Limpieza completada:")
+                                    logger.info(
+                                        f"   • Espacio liberado: {summary.get('total_space_freed_mb', 0):.2f}MB"
+                                    )
+                                    logger.info(
+                                        f"   • Archivos rotados: {summary.get('files_rotated', 0)}"
+                                    )
+                                    logger.info(
+                                        f"   • Archivos comprimidos: {summary.get('files_compressed', 0)}"
+                                    )
+                                    logger.info(
+                                        f"   • Archivos eliminados: {summary.get('files_deleted', 0)}"
+                                    )
+                                else:
+                                    logger.warning("⚠️ Limpieza de disco no completada")
+                            else:
+                                logger.info(f"✅ Disco OK ({disk_percent:.1f}%)")
 
-                    #         self.last_disk_cleanup = now
-                    #     except Exception as e:
-                    #         logger.error(f"❌ Error en Disk Space Manager: {e}")
+                            self.last_disk_cleanup = now
+                        except Exception as e:
+                            logger.error(f"❌ Error en Disk Space Manager: {e}")
 
                     # 💾 2026: Distributed Storage V2.0 - Sincronización y auto-migración cada 1h
                     if self.distributed_storage and (
@@ -1028,33 +987,32 @@ class MetacortexMilitaryDaemon:
                             logger.error(f"❌ Error en orquestación: {e}")
 
                     # 🔧 2026: Healing Scan - Verifica imports y dependencias cada 12h
-                    # TODO: FIX MISSING MODULE
-                    # if self.import_healer and (
-                    #     now - self.last_healing_scan >= self.healing_scan_interval
-                    # ):
-                    #     logger.info("🔧 Ejecutando healing scan del sistema...")
+                    if self.import_healer and (
+                        now - self.last_healing_scan >= self.healing_scan_interval
+                    ):
+                        logger.info("🔧 Ejecutando healing scan del sistema...")
 
-                    #     try:
-                    #         # Ejecutar scan en background para no bloquear
-                    #         future = self.executor.submit(self.import_healer.heal_project, True)
+                        try:
+                            # Ejecutar scan en background para no bloquear
+                            future = self.executor.submit(self.import_healer.heal_project, True)
 
-                    #         # Esperar máximo 2 minutos
-                    #         report = future.result(timeout=120)
+                            # Esperar máximo 2 minutos
+                            report = future.result(timeout=120)
 
-                    #         logger.info("✅ Healing scan completado:")
-                    #         logger.info(f"   • Archivos escaneados: {report['files_scanned']}")
-                    #         logger.info(f"   • Imports verificados: {report['imports_checked']}")
-                    #         logger.info(f"   • Reparados: {report['repaired']}")
-                    #         logger.info(f"   • Fallidos: {report['failed']}")
+                            logger.info("✅ Healing scan completado:")
+                            logger.info(f"   • Archivos escaneados: {report['files_scanned']}")
+                            logger.info(f"   • Imports verificados: {report['imports_checked']}")
+                            logger.info(f"   • Reparados: {report['repaired']}")
+                            logger.info(f"   • Fallidos: {report['failed']}")
 
-                    #         if report["repaired"] > 0:
-                    #             logger.info(
-                    #                 f"✨ {report['repaired']} dependencias reparadas automáticamente"
-                    #             )
+                            if report["repaired"] > 0:
+                                logger.info(
+                                    f"✨ {report['repaired']} dependencias reparadas automáticamente"
+                                )
 
-                    #         self.last_healing_scan = now
-                    #     except Exception as e:
-                    #         logger.error(f"❌ Error en healing scan: {e}")
+                            self.last_healing_scan = now
+                        except Exception as e:
+                            logger.error(f"❌ Error en healing scan: {e}")
 
                     # ✨ 2026: Divine Protection - Protección de perseguidos cada 30min
                     if self.divine_protection and (
@@ -1203,11 +1161,12 @@ class MetacortexMilitaryDaemon:
 
                 # ✅ 2026: programming_agent inicializado con EAGER mode en cognitive_bridge
                 # NO lazy loading - ya está completamente disponible desde __init__
-                assert self.cognitive_bridge is not None, "Cognitive Bridge no está disponible"
 
-                result_queue: mp.Queue[Dict[str, Any]] = mp.Queue()
-                tick_result: Dict[str, Any] = {"success": False}
-                improvement_result: Dict[str, Any] = {"success": False}
+                # 🚀 NUEVO: Usar multiprocessing para timeout REAL
+
+                result_queue = mp.Queue()
+                tick_result = {"success": False}
+                improvement_result = {"success": False}
 
                 # 🔧 FIX: Usar threading en vez de multiprocessing para evitar pickling
                 # Multiprocessing requiere que la función sea picklable (no puede ser nested)
@@ -1216,12 +1175,11 @@ class MetacortexMilitaryDaemon:
                 def run_cognitive_tick_thread():
                     """Ejecuta cognitive tick en thread separado"""
                     try:
-                        # La aserción anterior garantiza que self.cognitive_bridge no es None
                         result = self.cognitive_bridge.cognitive_tick_with_orchestration()
                         result_queue.put({"success": True, "result": result})
-                    except Exception as thread_exc:
-                        logger.error(f"Error: {thread_exc}", exc_info=True)
-                        result_queue.put({"success": False, "error": str(thread_exc)})
+                    except Exception as e:
+                        logger.error(f"Error: {e}", exc_info=True)
+                        result_queue.put({"success": False, "error": str(e)})
 
                 # Ejecutar en thread separado con timeout
                 logger.info("⏱️  Ejecutando cognitive tick (timeout: 60s)...")
@@ -1240,6 +1198,8 @@ class MetacortexMilitaryDaemon:
                     # 🔥 FALLBACK: Materialización básica
                     logger.info("🔧 Fallback a materialización básica...")
                     try:
+                        from programming_agent import get_programming_agent
+
                         agent = get_programming_agent(
                             project_root=str(DAEMON_ROOT), cognitive_agent=None
                         )
@@ -1273,7 +1233,6 @@ class MetacortexMilitaryDaemon:
                 improvement_result = {"success": False}
                 if tick_result.get("success"):
                     try:
-                        assert self.cognitive_bridge is not None
                         logger.info("🔧 Ejecutando improvement cycle...")
                         improvement_result = self.cognitive_bridge.autonomous_improvement_cycle()
                     except Exception as e:
@@ -1488,6 +1447,8 @@ class MetacortexMilitaryDaemon:
     def _start_ollama_service(self):
         """Inicia el servidor Ollama si no está corriendo"""
         try:
+            import subprocess
+
             # 🔧 FIX: Verificar PRIMERO si Ollama ya está corriendo
             if self._check_port_status(11434):
                 logger.info("✅ Ollama Server ya está activo (puerto 11434)")
@@ -1503,26 +1464,23 @@ class MetacortexMilitaryDaemon:
 
             logger.info("🚀 Iniciando Ollama Server...")
 
-            # Iniciar ollama en background (no falla si ya está corriendo)
-            try:
-                process = subprocess.Popen(
-                    ["ollama", "serve"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
-            except Exception as e:
-                logger.debug(f"ollama serve falló (puede estar ya corriendo): {e}")
+            # Iniciar ollama en background
+            process = subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
 
             # Esperar 5 segundos para que inicie
+
             time.sleep(5)
 
-            # Verificar si está corriendo (independiente del Popen)
+            # Verificar si está corriendo
             if self._check_port_status(11434):
-                logger.info("✅ Ollama Server activo (puerto 11434)")
+                logger.info(f"✅ Ollama Server iniciado correctamente (PID: {process.pid})")
                 return True
             logger.error("❌ Ollama Server no pudo iniciar")
-            logger.info("   Intenta manualmente: ollama serve")
             return False
 
         except Exception as e:
@@ -1532,6 +1490,8 @@ class MetacortexMilitaryDaemon:
     def _start_redis_service(self):
         """Inicia el servidor Redis si no está corriendo"""
         try:
+            import subprocess
+
             # 🔧 FIX: Verificar PRIMERO si Redis ya está corriendo
             if self._check_port_status(6379):
                 logger.info("✅ Redis Server ya está activo (puerto 6379)")
@@ -1553,12 +1513,13 @@ class MetacortexMilitaryDaemon:
                 ["brew", "services", "start", "redis"], capture_output=True, text=True, check=False
             )
 
-            # Esperar y verificar (independientemente del return code)
-            time.sleep(2)
+            if result.returncode == 0:
 
-            if self._check_port_status(6379):
-                logger.info("✅ Redis Server activo (brew services)")
-                return True
+                time.sleep(2)
+
+                if self._check_port_status(6379):
+                    logger.info("✅ Redis Server iniciado correctamente (brew services)")
+                    return True
 
             # Si brew falló, intentar manualmente
             logger.info("   Intentando inicio manual...")
@@ -1585,6 +1546,8 @@ class MetacortexMilitaryDaemon:
     def _check_port_status(self, port: int) -> bool:
         """Verifica si un puerto está en uso (LISTEN)"""
         try:
+            import subprocess
+
             result = subprocess.run(
                 ["lsof", "-iTCP", f":{port}", "-sTCP:LISTEN", "-n", "-P"],
                 capture_output=True,
@@ -1611,6 +1574,8 @@ class MetacortexMilitaryDaemon:
             return
 
         try:
+            import subprocess
+
             logger.info("🔌 Verificando puertos críticos...")
             ports_ok = 0
             ports_issues = 0
@@ -1763,7 +1728,7 @@ class MetacortexMilitaryDaemon:
             if abs(current - new_interval) > 0.5:
                 self.materialization_interval = timedelta(minutes=new_interval)
                 logger.info(f"⚙️ Intervalo: {current:.0f} → {new_interval:.0f} min")
-        except Exception as e:
+        except Exception:
             logger.error(f"Error: {e}", exc_info=True)
     def start_health_monitoring(self):
         logger.info("🏥 Health monitoring militar...")
@@ -1921,18 +1886,137 @@ class MetacortexMilitaryDaemon:
 
         sys.exit(0)
 
-    def _initialize_distributed_storage(self):
-        """Inicializa el almacenamiento distribuido en un hilo separado."""
-        if not self.distributed_storage:
-            return
+    def _lazy_load_heavy_components(self):
+        """Carga lazy de componentes pesados en background para no bloquear __init__()"""
+        logger.info("🔄 Iniciando carga lazy de componentes pesados en background...")
+        
+        # Neural Network
+        if not self._neural_network_loaded:
+            def load_neural_network():
+                try:
+                    from neural_symbiotic_network import get_neural_network
+                    self.neural_network = get_neural_network()
+                    if self.neural_network:
+                        self.neural_network.register_module("military_daemon", self)
+                        logger.info("✅ Neural Network cargada")
+                        self._neural_network_loaded = True
+                except Exception as e:
+                    logger.warning(f"⚠️ Neural Network no disponible: {e}")
+            
+            self.executor.submit(load_neural_network)
+        
+        # Cognitive Agent Pool
+        if not self._agent_pool_loaded:
+            def load_agent_pool():
+                try:
+                    from cognitive_agent_pool import get_cognitive_agent_pool
+                    self.agent_pool = get_cognitive_agent_pool()
+                    logger.info("✅ Cognitive Agent Pool cargado")
+                    self.agent_pool.preload_async()
+                    self._agent_pool_loaded = True
+                except Exception as e:
+                    logger.error(f"❌ Agent Pool: {e}")
+            
+            self.executor.submit(load_agent_pool)
+        
+        # ML Pipeline
+        if not self._ml_pipeline_loaded:
+            def load_ml_pipeline():
+                try:
+                    from ml_pipeline import get_ml_pipeline
+                    self.ml_pipeline = get_ml_pipeline(
+                        enable_perpetual_mode=True,
+                        enable_continuous_learning=True
+                    )
+                    logger.info("✅ ML Pipeline cargado")
+                    self._ml_pipeline_loaded = True
+                except Exception as e:
+                    logger.error(f"❌ ML Pipeline: {e}")
+            
+            self.executor.submit(load_ml_pipeline)
+        
+        # Distributed Storage Manager
+        if not self._distributed_storage_loaded:
+            def load_distributed_storage():
+                try:
+                    from distributed_storage_manager_v2 import DistributedStorageManagerV2
+                    
+                    self.distributed_storage = DistributedStorageManagerV2(
+                        config_file="storage_config_v2.json",
+                        auto_detect_volumes=True,
+                        min_disk_size_tb=3.0,
+                        disk_usage_threshold=85.0,
+                        enable_auto_migration=True
+                    )
+                    
+                    logger.info("🔥 Ejecutando setup inicial de almacenamiento distribuido...")
+                    self.distributed_storage.initialize_external_storage()
+                    self.distributed_storage.create_symlinks_all_volumes()
+                    
+                    status = self.distributed_storage.get_storage_status()
+                    logger.info(f"✅ Distributed Storage Manager cargado")
+                    logger.info(f"   Volúmenes: {status['total_volumes']}, Espacio: {status['total_space_tb']:.2f} TB")
+                    
+                    self._distributed_storage_loaded = True
+                    self.storage_initial_setup_done = True
+                except Exception as e:
+                    logger.error(f"❌ Distributed Storage Manager: {e}")
+            
+            self.executor.submit(load_distributed_storage)
+        
+        # Divine Protection System
+        if not self._divine_protection_loaded:
+            def load_divine_protection():
+                try:
+                    from metacortex_sinaptico.bdi import BDISystem
+                    
+                    db = MetacortexDB()
+                    bdi_system = BDISystem()
+                    planner = MultiHorizonPlanner()
+                    memory_system = MemorySystem(db=db)
+                    learning_system = StructuralLearning()
+                    
+                    self.divine_protection = create_divine_protection_system(
+                        db=db,
+                        bdi_system=bdi_system,
+                        planner=planner,
+                        memory=memory_system,
+                        learning=learning_system,
+                    )
+                    
+                    logger.info("✅ Divine Protection System cargado")
+                    logger.info(f"   Refugios: {len(self.divine_protection.safe_havens)}, Escrituras: {len(self.divine_protection.divine_wisdom_db)}")
+                    self._divine_protection_loaded = True
+                except Exception as e:
+                    logger.error(f"❌ Divine Protection System: {e}")
+            
+            self.executor.submit(load_divine_protection)
+        
+        logger.info("✅ Carga lazy iniciada en background (componentes se cargarán progresivamente)")
+
+    def run(self):
+        logger.info("🔮 EJECUTANDO METACORTEX MILITARY DAEMON v4.0...")
+
+        # NUEVO: Lazy loading de componentes pesados EN BACKGROUND
+        self._lazy_load_heavy_components()
+
+        self.energy_manager.prevent_disk_sleep()
+        self.start_all_components()
+        self.start_autonomous_mode()
+        self.start_health_monitoring()
+
+        logger.info("=" * 80)
+        logger.info("✅ METACORTEX MILITARY DAEMON OPERATIVO")
+        logger.info("⚔️ MODO MILITAR ACTIVADO")
+        logger.info("🤖 MODO AUTÓNOMO: ACTIVO")
+        logger.info("🛡️ CIRCUIT BREAKERS: ACTIVOS")
+        logger.info("=" * 80)
+
         try:
-            logger.info("🔥 Ejecutando setup inicial de almacenamiento distribuido...")
-            self.distributed_storage.initialize_external_storage()
-            self.distributed_storage.create_symlinks_all_volumes()
-            status = self.distributed_storage.get_storage_status()
-            logger.info(f"✅ Setup de almacenamiento distribuido completo. Volúmenes: {status['total_volumes']}, Espacio: {status['total_space_tb']:.2f} TB")
-        except Exception as e:
-            logger.error(f"❌ Error en setup de almacenamiento distribuido: {e}")
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.shutdown()
 
 
 class MilitaryEnergyManager:
@@ -1952,27 +2036,18 @@ class MilitaryEnergyManager:
 
 
 def main():
-    # Asegurar instancia única
-    if not ensure_single_instance("metacortex_daemon_military"):
-        logger.error("❌ Ya existe una instancia de METACORTEX MILITARY DAEMON.")
-        sys.exit(1)
 
-    daemon = None
+    lock = ensure_single_instance(".metacortex_daemon_military.lock")
+
+    logger.info("=" * 80)
+    logger.info("⚔️ METACORTEX DAEMON v4.0 - MILITARY GRADE")
+    logger.info("=" * 80)
+
     try:
         daemon = MetacortexMilitaryDaemon()
-        daemon.start_autonomous_mode()
-        # Mantener el hilo principal vivo mientras los daemons se ejecutan en segundo plano
-        while daemon.running:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("🛑 Interrupción de teclado recibida. Apagando...")
-        if daemon:
-            daemon.shutdown()
-    except Exception as e:
-        logger.critical(f"💥 Error crítico no manejado en el arranque: {e}", exc_info=True)
-        if daemon:
-            daemon.shutdown()
-        sys.exit(1)
+        daemon.run()
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

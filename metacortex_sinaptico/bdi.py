@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
-import time
-import math
-from typing import Dict, List, Any, Optional, Callable, Coroutine
-from dataclasses import dataclass, field
-from enum import Enum
-import logging
-
-from .utils import setup_logging
-from .metacortex_neural_hub import Event, EventPriority, EventCategory, MetacortexNeuralHub, get_neural_hub
-from neural_symbiotic_network import get_neural_network
-from .emotional_models import Emotion as EmotionType
-
 """
 METACORTEX - Sistema BDI Avanzado con Razonamiento Híbrido 2026
 ===============================================================
@@ -37,6 +23,22 @@ aprender valores desde experiencia, y tomar decisiones que balanceen múltiples
 criterios éticos. La integración con affect.py y ethics.py permite razonamiento
 moral con componentes emocionales (culpa, orgullo, empatía).
 """
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+from __future__ import annotations
+
+import time
+import math
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass, field
+from enum import Enum
+
+from .utils import setup_logging
+from .metacortex_neural_hub import Event, EventPriority
+from .metacortex_neural_hub import Event, EventPriority
 
 logger = setup_logging()
 
@@ -1070,6 +1072,8 @@ class BDISystem:
 
         # 🧠 CONEXIÓN A RED NEURONAL SIMBIÓTICA
         try:
+            from neural_symbiotic_network import get_neural_network
+
             self.neural_network = get_neural_network()
             self.neural_network.register_module("bdi_system", self)
             logger.info("✅ 'bdi_system' conectado a red neuronal")
@@ -1079,28 +1083,25 @@ class BDISystem:
         
         # 🔌 CONEXIÓN AL NEURAL HUB 2026
         try:
+            from .metacortex_neural_hub import get_neural_hub, MetacortexNeuralHub, Event, EventCategory, EventPriority
+            
             self.neural_hub: Optional[MetacortexNeuralHub] = get_neural_hub()
             self.Event = Event
             self.EventCategory = EventCategory
             self.EventPriority = EventPriority
             
             # Crear wrappers para handlers que conviertan Event -> Dict
-            async def belief_handler(event: Event):
-                await self._handle_belief_update_event(event.payload)
+            def belief_handler(event):
+                return self._handle_belief_update_event(event.data)
             
-            # Este handler es síncrono
-            def desire_handler_sync(event: Event):
-                self._handle_desire_event(event.payload)
-
-            async def desire_handler(event: Event):
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, desire_handler_sync, event)
-
-            async def dilemma_handler(event: Event):
-                await self._handle_ethical_dilemma_event(event.payload)
+            def desire_handler(event):
+                return self._handle_desire_event(event.data)
             
-            async def knowledge_handler(event: Event):
-                await self._handle_value_learned_event(event.payload)
+            def dilemma_handler(event):
+                return self._handle_ethical_dilemma_event(event.data)
+            
+            def knowledge_handler(event):
+                return self._handle_value_learned_event(event.data)
             
             # Registrar este módulo en el Neural Hub
             subscriptions = {
@@ -1110,27 +1111,26 @@ class BDISystem:
                 EventCategory.KNOWLEDGE_ACQUIRED
             }
             
-            handlers: Dict[EventCategory, Callable[[Event], Coroutine[Any, Any, None]]] = {
+            handlers = {
                 EventCategory.BELIEF_UPDATE: belief_handler,
                 EventCategory.DESIRE_CHANGE: desire_handler,
                 EventCategory.ETHICAL_DILEMMA: dilemma_handler,
                 EventCategory.KNOWLEDGE_ACQUIRED: knowledge_handler
             }
             
-            if self.neural_hub:
-                string_handlers = {cat.value: handler for cat, handler in handlers.items()}
-                self.neural_hub.register_module(
-                    name="bdi_system",
-                    instance=self,
-                    handlers=string_handlers
-                )
+            self.neural_hub.register_module(
+                name="bdi_system",
+                instance=self,
+                subscriptions=subscriptions,
+                handlers=handlers
+            )
             
-                logger.info("✅ 'bdi_system' conectado a Neural Hub")
+            logger.info("✅ 'bdi_system' conectado a Neural Hub")
             
-                # Heartbeat para health monitoring
-                asyncio.create_task(self._start_heartbeat())
+            # Heartbeat para health monitoring
+            self._start_heartbeat()
             
-                logger.info("✅ BDISystem conectado al Neural Hub")
+            logger.info("✅ BDISystem conectado al Neural Hub")
         except Exception as e:
             logger.warning(f"⚠️ No se pudo conectar al Neural Hub: {e}")
             self.neural_hub = None
@@ -1324,6 +1324,7 @@ class BDISystem:
         if self.affect_system and hasattr(self.affect_system, 'trigger_emotion'):
             # Cambios importantes pueden generar sorpresa
             try:
+                from .affect import EmotionType
                 self.affect_system.trigger_emotion(
                     EmotionType.SURPRISE,
                     intensity=0.6,
@@ -1367,7 +1368,7 @@ class BDISystem:
                 return True
         return False
 
-    async def select_intention(self, current_state: Dict[str, Any]) -> Optional[Intention]:
+    def select_intention(self, current_state: Dict[str, Any]) -> Optional[Intention]:
         """
         Selecciona la intención más apropiada basada en necesidades activas y emoción.
         
@@ -1379,11 +1380,11 @@ class BDISystem:
         Returns:
             Intención seleccionada o None
         """
-        # Usar método con razonamiento híbrido
+        # Usar nuevo método con razonamiento híbrido + ética
         urgency = current_state.get("urgency", 0.5)
         complexity = current_state.get("complexity", 0.5)
         
-        return await self.select_intention_with_hybrid_reasoning(
+        return self.select_intention_with_ethics(
             current_state=current_state,
             urgency=urgency,
             complexity=complexity
@@ -1467,7 +1468,7 @@ class BDISystem:
                 "share_insights"
             ]
 
-    async def update_intention_progress(self, progress_delta: float, success: bool = True) -> None:
+    def update_intention_progress(self, progress_delta: float, success: bool = True) -> None:
         """Actualiza el progreso de la intención actual con aprendizaje."""
         if self.current_intention:
             self.current_intention.update_progress(progress_delta)
@@ -1486,7 +1487,7 @@ class BDISystem:
                     self.need_hierarchy.satisfy_need(self.current_intention.desire, satisfaction)
                     
                     # 🧠 NUEVO 2026: Aprender desde outcome
-                    await self.learn_from_intention_outcome(
+                    self.learn_from_intention_outcome(
                         intention=self.current_intention,
                         success=success,
                         outcome_value=outcome_value
@@ -1524,6 +1525,7 @@ class BDISystem:
             return
 
         try:
+            from .affect import EmotionType
             if success:
                 self.affect_system.trigger_emotion(
                     EmotionType.JOY,
@@ -1605,41 +1607,40 @@ class BDISystem:
     # NEURAL HUB HANDLERS 2026
     # ═══════════════════════════════════════════════════════════════════════
     
-    async def _handle_belief_update_event(self, event_data: Dict[str, Any]) -> None:
+    def _handle_belief_update_event(self, event: Dict[str, Any]) -> None:
         """Handler para eventos de actualización de creencias desde otros módulos."""
         try:
-            key = event_data.get("belief_key", "")
-            value = event_data.get("value")
-            confidence = event_data.get("confidence", 0.7)
-            evidence = event_data.get("evidence", [])
+            key = event.get("belief_key", "")
+            value = event.get("value")
+            confidence = event.get("confidence", 0.7)
+            evidence = event.get("evidence", [])
             
             if key and value is not None:
                 self.add_belief(key, value, confidence, evidence)
                 
                 # Broadcast de vuelta si es creencia importante
                 if confidence > 0.8 and self.neural_hub:
-                    await self.neural_hub.publish(Event(
-                        id=f"evt_bdi_{time.time()}",
-                        category=self.EventCategory.BELIEF_UPDATE,
+                    self.neural_hub.publish(Event(
+                        type="belief_updated",
                         source="bdi_system",
-                        payload={
+                        data={
                             "key": key,
                             "value": value,
                             "confidence": confidence
                         },
-                        priority=self.EventPriority.MEDIUM
+                        priority=EventPriority.MEDIUM
                     ))
                     
         except Exception as e:
             logger.error(f"Error en bdi.py: {e}", exc_info=True)
             self.logger.error(f"Error handling belief update event: {e}")
     
-    def _handle_desire_event(self, event_data: Dict[str, Any]) -> None:
+    def _handle_desire_event(self, event: Dict[str, Any]) -> None:
         """Handler para eventos de deseo desde otros módulos."""
         try:
-            desire_name = event_data.get("desire", "")
-            priority = event_data.get("priority", 0.5)
-            need_level_str = event_data.get("need_level", "ESTEEM")
+            desire_name = event.get("desire", "")
+            priority = event.get("priority", 0.5)
+            need_level_str = event.get("need_level", "ESTEEM")
             
             if desire_name:
                 # Mapear string a enum
@@ -1654,11 +1655,11 @@ class BDISystem:
             logger.error(f"Error en bdi.py: {e}", exc_info=True)
             self.logger.error(f"Error handling desire event: {e}")
     
-    async def _handle_ethical_dilemma_event(self, event_data: Dict[str, Any]) -> None:
+    def _handle_ethical_dilemma_event(self, event: Dict[str, Any]) -> None:
         """Handler para dilemas éticos que requieren evaluación BDI."""
         try:
-            action = event_data.get("action", "")
-            context = event_data.get("context", {})
+            action = event.get("action", "")
+            context = event.get("context", {})
             
             if action:
                 # Evaluar con multi-criteria planner
@@ -1676,11 +1677,10 @@ class BDISystem:
                 if self.neural_hub:
                     priority = EventPriority.HIGH if decision.constraints_violated else EventPriority.MEDIUM
                     
-                    await self.neural_hub.publish(Event(
-                        id=f"evt_bdi_{time.time()}",
-                        category=self.EventCategory.ETHICAL_DILEMMA,
+                    self.neural_hub.publish(Event(
+                        type="ethical_decision",
                         source="bdi_system",
-                        payload={
+                        data={
                             "action": action,
                             "decision": {
                                 "overall_score": decision.overall_score,
@@ -1698,13 +1698,13 @@ class BDISystem:
             logger.error(f"Error en bdi.py: {e}", exc_info=True)
             self.logger.error(f"Error handling ethical dilemma: {e}")
     
-    async def _handle_value_learned_event(self, event_data: Dict[str, Any]) -> None:
+    def _handle_value_learned_event(self, event: Dict[str, Any]) -> None:
         """Handler para valores aprendidos desde experiencia."""
         try:
-            action = event_data.get("action", "")
-            context = event_data.get("context", "general")
-            outcome = event_data.get("outcome_value", 0.5)
-            emotion = event_data.get("emotional_valence", 0.0)
+            action = event.get("action", "")
+            context = event.get("context", "general")
+            outcome = event.get("outcome_value", 0.5)
+            emotion = event.get("emotional_valence", 0.0)
             
             if action:
                 # Aprender desde outcome
@@ -1730,20 +1730,21 @@ class BDISystem:
             logger.error(f"Error en bdi.py: {e}", exc_info=True)
             self.logger.error(f"Error handling value learned event: {e}")
     
-    async def _start_heartbeat(self) -> None:
+    def _start_heartbeat(self) -> None:
         """Inicia heartbeat periódico al Neural Hub."""
         if not self.neural_hub:
             return
         
         try:
+            from .metacortex_neural_hub import Event, EventPriority
+            
             # Enviar heartbeat con métricas BDI
             state = self.get_system_state()
             
-            await self.neural_hub.publish(Event(
-                id=f"evt_bdi_hb_{time.time()}",
-                category=self.EventCategory.SYSTEM, # Corrected from HEARTBEAT
+            self.neural_hub.publish(Event(
+                type="heartbeat",
                 source="bdi_system",
-                payload={
+                data={
                     "health": "operational",
                     "beliefs_count": state["beliefs"]["total"],
                     "desires_count": state["desires"]["total"],
@@ -1779,7 +1780,7 @@ class BDISystem:
     # MÉTODOS AVANZADOS 2026: Razonamiento Híbrido + Ética
     # ═══════════════════════════════════════════════════════════════════════
     
-    async def select_intention_with_hybrid_reasoning(
+    def select_intention_with_ethics(
         self,
         current_state: Dict[str, Any],
         urgency: float = 0.5,
@@ -1822,14 +1823,14 @@ class BDISystem:
         # 3. Razonamiento según modo
         if reasoning_mode == ReasoningMode.DELIBERATIVE:
             # Evaluación exhaustiva con ética
-            desire_candidate = self.hybrid_reasoner.reason_deliberative(
+            intention = self.hybrid_reasoner.reason_deliberative(
                 options=active_needs,
                 evaluator_fn=lambda d: self._evaluate_desire_with_ethics(d, current_state),
                 max_depth=3
             )
         elif reasoning_mode == ReasoningMode.REACTIVE:
             # Evaluación rápida heurística
-            desire_candidate = self.hybrid_reasoner.reason_reactive(
+            intention = self.hybrid_reasoner.reason_reactive(
                 options=active_needs,
                 heuristic_fn=lambda d: d.get_urgency(
                     self.need_hierarchy.emotional_state
@@ -1838,15 +1839,15 @@ class BDISystem:
         else:
             # Híbrido: top 3 con deliberativo
             candidates = active_needs[:3]
-            desire_candidate = self.hybrid_reasoner.reason_deliberative(
+            intention = self.hybrid_reasoner.reason_deliberative(
                 options=candidates,
                 evaluator_fn=lambda d: self._evaluate_desire_with_ethics(d, current_state),
                 max_depth=2
             )
         
         # 4. Crear intención si hay deseo seleccionado
-        if desire_candidate:
-            return await self._create_intention_from_desire(desire_candidate, current_state)
+        if intention:
+            return self._create_intention_from_desire(intention, current_state)
         
         return None
     
@@ -1880,7 +1881,7 @@ class BDISystem:
         
         return combined_score
     
-    async def _create_intention_from_desire(
+    def _create_intention_from_desire(
         self,
         desire: Desire,
         context: Dict[str, Any]
@@ -1899,11 +1900,11 @@ class BDISystem:
         # Broadcast al neural hub
         if self.neural_hub:
             try:
-                await self.neural_hub.publish(Event(
-                    id=f"evt_bdi_int_{time.time()}",
-                    category=self.EventCategory.INTENTION_SET,
+                from .metacortex_neural_hub import Event, EventPriority
+                self.neural_hub.publish(Event(
+                    type="intention_selected",
                     source="bdi_system",
-                    payload={
+                    data={
                         "goal": intention.goal,
                         "priority": desire.priority,
                         "need_level": desire.need_level.value,
@@ -1917,7 +1918,7 @@ class BDISystem:
         
         return intention
     
-    async def learn_from_intention_outcome(
+    def learn_from_intention_outcome(
         self,
         intention: Intention,
         success: bool,
@@ -1949,11 +1950,11 @@ class BDISystem:
         # Broadcast al neural hub
         if self.neural_hub:
             try:
-                await self.neural_hub.publish(Event(
-                    id=f"evt_bdi_learn_{time.time()}",
-                    category=self.EventCategory.KNOWLEDGE_ACQUIRED,
+                from .metacortex_neural_hub import Event, EventPriority
+                self.neural_hub.publish(Event(
+                    type="value_learned",
                     source="bdi_system",
-                    payload={
+                    data={
                         "action": intention.goal,
                         "context": "intention_execution",
                         "outcome_value": outcome_value,
