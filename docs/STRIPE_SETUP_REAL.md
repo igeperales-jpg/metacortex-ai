@@ -131,8 +131,8 @@ Titular: Tu Nombre (debe coincidir con cuenta Stripe)
 **Ejemplo de keys LIVE:**
 ```bash
 # ESTAS SON REALES (no test)
-STRIPE_SECRET_KEY=sk_live_51MNoPqRsTuVwXyZ1234567890abcdefghijklmnopqrstuvwxyz
-STRIPE_PUBLISHABLE_KEY=pk_live_51MNoPqRsTuVwXyZ1234567890abcdefghijklmnopqrstuvwxyz
+STRIPE_SECRET_KEY=sk_live_XXXXXXXXXXXXXXXXXXXXX_REPLACE_WITH_YOUR_REAL_KEY
+STRIPE_PUBLISHABLE_KEY=pk_live_XXXXXXXXXXXXXXXXXXXXX_REPLACE_WITH_YOUR_REAL_KEY
 ```
 
 ### **3.3 Webhook Secret (para pagos automáticos)**
@@ -202,9 +202,9 @@ STRIPE_WEBHOOK_SECRET=whsec_YOUR_WEBHOOK_SECRET_HERE
 # =============================================================================
 # STRIPE PRODUCTION (LIVE MODE) ⚠️ REAL MONEY
 # =============================================================================
-STRIPE_SECRET_KEY=sk_live_51MNoPqRsTuVwXyZ1234567890abcdefghijklmnopqrstuvwxyz
-STRIPE_PUBLISHABLE_KEY=pk_live_51MNoPqRsTuVwXyZ1234567890abcdefghijklmnopqrstuvwxyz
-STRIPE_WEBHOOK_SECRET=whsec_abc123def456ghi789jkl012mno345pqr678stu901vwx234yz
+STRIPE_SECRET_KEY=sk_live_XXXXXXXXXXXXXXXXXXXXX_REPLACE_WITH_YOUR_REAL_KEY
+STRIPE_PUBLISHABLE_KEY=pk_live_XXXXXXXXXXXXXXXXXXXXX_REPLACE_WITH_YOUR_REAL_KEY
+STRIPE_WEBHOOK_SECRET=whsec_XXXXXXXXXXXXXXXXXXX_REPLACE_WITH_YOUR_WEBHOOK_SECRET
 
 # Modo de entorno
 ENVIRONMENT=production
