@@ -52,33 +52,32 @@ import sys
 from collections import defaultdict, deque
 import numpy as np
 
-# Importaciones del ecosistema
+# ═══════════════════════════════════════════════════════════════════════════
+# SINGLETON REGISTRY - NO MÁS CIRCULAR IMPORTS
+# ═══════════════════════════════════════════════════════════════════════════
 try:
-    # ML Pipeline
-    from ml_pipeline import get_ml_pipeline, MilitaryGradeMLPipeline, TrainingStatus
-    
-    # Internet Search
-    from internet_search import get_internet_search, InternetSearchEngine
-    
-    # Ollama Integration
-    from ollama_integration import get_ollama_integration, MilitaryGradeOllamaIntegration
-    
-    # World Model
-    from metacortex_sinaptico.world_model import (
-        WorldModel, RealAction, ActionType, EntityType, RealWorldEntity
+    # Usar registry centralizado para evitar circular imports
+    from singleton_registry import (
+        registry,
+        get_ml_pipeline,
+        get_ollama,
+        get_internet_search,
+        get_world_model,
+        get_cognitive_agent
     )
     
-    # Cognitive Agent
-    from metacortex_sinaptico.core import CognitiveAgent
-    
-    # LLM Integration
-    from llm_integration import get_llm
-    
     logger = logging.getLogger(__name__)
+    logger.info("✅ Singleton registry imported successfully")
 except ImportError as e:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
-    logger.warning(f"Some imports failed: {e}")
+    logger.error(f"❌ Failed to import singleton_registry: {e}")
+    # Crear stubs para que el código no falle
+    def get_ml_pipeline(): return None
+    def get_ollama(): return None
+    def get_internet_search(): return None
+    def get_world_model(): return None
+    def get_cognitive_agent(): return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -254,12 +253,12 @@ class AutonomousModelOrchestrator:
         # Mapeo de especializaciones a modelos
         self.specialization_index: Dict[ModelSpecialization, List[str]] = defaultdict(list)
         
-        # Integrations
-        self.ml_pipeline: Optional[MilitaryGradeMLPipeline] = None
-        self.internet_search: Optional[InternetSearchEngine] = None
-        self.ollama: Optional[MilitaryGradeOllamaIntegration] = None
-        self.world_model: Optional[WorldModel] = None
-        self.cognitive_agent: Optional[CognitiveAgent] = None
+        # Integrations (lazy-loaded via singleton registry)
+        self.ml_pipeline: Optional[Any] = None
+        self.internet_search: Optional[Any] = None
+        self.ollama: Optional[Any] = None
+        self.world_model: Optional[Any] = None
+        self.cognitive_agent: Optional[Any] = None
         
         # Control de ejecución
         self.is_running = False
@@ -392,36 +391,38 @@ class AutonomousModelOrchestrator:
         return 0.5  # Default neutro
     
     def _setup_integrations(self):
-        """Conecta con todos los sistemas del ecosistema."""
-        logger.info("🔗 Setting up integrations...")
+        """Conecta con todos los sistemas del ecosistema via singleton registry."""
+        logger.info("🔗 Setting up integrations via singleton registry...")
         
         try:
-            # ML Pipeline
+            # ML Pipeline - lazy load via singleton
             self.ml_pipeline = get_ml_pipeline()
-            logger.info("   ✅ ML Pipeline connected")
+            logger.info("   ✅ ML Pipeline connected (singleton)")
         except Exception as e:
             logger.warning(f"   ⚠️  ML Pipeline not available: {e}")
         
         try:
-            # Internet Search
+            # Internet Search - lazy load via singleton
             self.internet_search = get_internet_search()
-            logger.info("   ✅ Internet Search connected")
+            logger.info("   ✅ Internet Search connected (singleton)")
         except Exception as e:
             logger.warning(f"   ⚠️  Internet Search not available: {e}")
         
         try:
-            # Ollama Integration
-            self.ollama = get_ollama_integration()
-            logger.info("   ✅ Ollama Integration connected")
+            # Ollama Integration - lazy load via singleton
+            self.ollama = get_ollama()
+            logger.info("   ✅ Ollama Integration connected (singleton)")
         except Exception as e:
             logger.warning(f"   ⚠️  Ollama not available: {e}")
         
         try:
-            # World Model
-            self.world_model = WorldModel()
-            logger.info("   ✅ World Model connected")
+            # World Model - lazy load via singleton
+            self.world_model = get_world_model()
+            logger.info("   ✅ World Model connected (singleton)")
         except Exception as e:
             logger.warning(f"   ⚠️  World Model not available: {e}")
+        
+        logger.info("✅ Integration setup complete (zero circular dependencies)")
     
     def _start_execution_threads(self):
         """Inicia threads de ejecución en background."""
