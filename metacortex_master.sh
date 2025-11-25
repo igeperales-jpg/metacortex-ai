@@ -602,21 +602,44 @@ verify_dependencies() {
     
     # 6. Modelos de Ollama
     log_info "Verificando modelos de Ollama..."
+    
+    # Primero verificar si Ollama está corriendo
+    if ! pgrep -f "ollama serve" > /dev/null 2>&1; then
+        log_warning "   Servidor Ollama NO está corriendo. Iniciando..."
+        ollama serve > /dev/null 2>&1 &
+        sleep 3  # Esperar a que inicie
+    fi
+    
+    # Verificar conexión a Ollama con timeout
+    if ! timeout 5 ollama list > /dev/null 2>&1; then
+        log_error "   No se puede conectar al servidor Ollama"
+        log_info "   Intenta reiniciar Ollama manualmente: ollama serve"
+        return 1
+    fi
+    
     local models_needed=("mistral:latest" "mistral:instruct" "mistral-nemo:latest")
     local models_missing=false
     
     for model in "${models_needed[@]}"; do
-        if ollama list 2>/dev/null | grep -q "$model"; then
-            log_success "   Modelo $model: Disponible"
+        # Usar timeout para evitar bloqueos
+        if timeout 10 ollama list 2>/dev/null | grep -q "^${model}"; then
+            log_success "   ✅ Modelo $model: Disponible"
         else
-            log_warning "   Modelo $model: NO DISPONIBLE (descargando...)"
-            ollama pull "$model" > /dev/null 2>&1 &
-            models_missing=true
+            log_warning "   ⚠️  Modelo $model: NO DISPONIBLE"
+            read -p "   ¿Descargar $model ahora? (s/N): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[SsYy]$ ]]; then
+                log_info "   Descargando $model..."
+                ollama pull "$model"
+                models_missing=true
+            else
+                log_info "   Saltando descarga de $model"
+            fi
         fi
     done
     
     if [ "$models_missing" = true ]; then
-        log_info "   Modelos descargándose en background..."
+        log_success "   Modelos descargados exitosamente"
     fi
     
     # 7. Archivos de configuración
@@ -1074,14 +1097,15 @@ start_system() {
 }
 
 stop_system() {
-    print_header "🛑 DETENIENDO METACORTEX COMPLETO (BASE + IA)"
+    print_header "🛑 DETENIENDO METACORTEX COMPLETO (BASE + IA) - MODO NUCLEAR"
     
     # ============================================================================
-    # PASO 1: DETENER SISTEMAS DE IA PRIMERO
+    # PASO 1: DETENER SISTEMAS DE IA PRIMERO (GRACEFUL)
     # ============================================================================
-    log_info "Deteniendo sistemas de IA..."
-    pkill -9 -f "python.*unified_startup.py" 2>/dev/null || true
-    pkill -9 -f "python.*emergency_contact_system.py" 2>/dev/null || true
+    log_info "Deteniendo sistemas de IA (SIGTERM primero)..."
+    pkill -15 -f "python.*unified_startup.py" 2>/dev/null || true
+    pkill -15 -f "python.*emergency_contact_system.py" 2>/dev/null || true
+    pkill -15 -f "python.*api_monetization_endpoint.py" 2>/dev/null || true
     
     # Limpiar PID del sistema unificado
     if [ -f "${PID_DIR}/unified_system.pid" ]; then
@@ -1091,9 +1115,9 @@ stop_system() {
     sleep 2
     
     # ============================================================================
-    # PASO 2: DETENER TODOS LOS PROCESOS METACORTEX (INCLUYE DUPLICADOS)
+    # PASO 2: DETENER TODOS LOS PROCESOS METACORTEX (SIGKILL NUCLEAR)
     # ============================================================================
-    log_info "Deteniendo TODOS los procesos METACORTEX (incluye duplicados)..."
+    log_info "🔥 MODO NUCLEAR: Matando TODOS los procesos METACORTEX con SIGKILL..."
     
     # Matar procesos específicos de METACORTEX (Python únicamente, NO bash)
     log_info "Matando procesos específicos de METACORTEX..."
@@ -1107,9 +1131,10 @@ stop_system() {
     pkill -9 -f "python.*start_neural_network.py" 2>/dev/null || true
     pkill -9 -f "python.*start_web_interface.py" 2>/dev/null || true
     pkill -9 -f "python.*neural_symbiotic_network.py" 2>/dev/null || true
-    pkill -9 -f "python.*web_interface/server.py" 2>/dev/null || true
     pkill -9 -f "python.*orchestrator.py" 2>/dev/null || true
     pkill -9 -f "python.*ml_pipeline.py" 2>/dev/null || true
+    pkill -9 -f "python.*unified_startup.py" 2>/dev/null || true
+    pkill -9 -f "python.*emergency_contact_system.py" 2>/dev/null || true
     
     # Detener Ollama si fue iniciado por METACORTEX
     if [ -f "${PID_DIR}/ollama.pid" ]; then
@@ -1124,7 +1149,22 @@ stop_system() {
     sleep 2
     
     # ============================================================================
-    # PASO 3: DETENER CAFFEINATE (WRAPPER) - DESPUÉS DE MATAR PROCESOS HIJO
+    # PASO 3: MATAR PROCESOS POR PUERTO (LIBERAR TODOS LOS PUERTOS)
+    # ============================================================================
+    log_info "🔓 Liberando puertos ocupados..."
+    
+    for port in 8000 8001 8080 8100 8200 9090 11434; do
+        local port_pid=$(lsof -ti:$port 2>/dev/null || true)
+        if [ -n "$port_pid" ]; then
+            log_info "Matando proceso en puerto $port (PID: $port_pid)..."
+            kill -9 $port_pid 2>/dev/null || true
+        fi
+    done
+    
+    sleep 1
+    
+    # ============================================================================
+    # PASO 4: DETENER CAFFEINATE (WRAPPER) - DESPUÉS DE MATAR PROCESOS HIJO
     # ============================================================================
     local caffeinate_pid_file="${PROJECT_ROOT}/caffeinate.pid"
     if [ -f "$caffeinate_pid_file" ]; then
@@ -1139,7 +1179,7 @@ stop_system() {
     fi
     
     # Matar cualquier caffeinate relacionado con METACORTEX que quedó huérfano
-    for pid in $(pgrep -f "caffeinate.*metacortex_daemon.py" 2>/dev/null || true); do
+    for pid in $(pgrep -f "caffeinate.*metacortex" 2>/dev/null || true); do
         if ps -p "$pid" > /dev/null 2>&1; then
             log_info "Deteniendo caffeinate huérfano (PID: $pid)..."
             kill -9 "$pid" 2>/dev/null || true
@@ -1147,38 +1187,110 @@ stop_system() {
     done
     
     # ============================================================================
-    # PASO 4: VERIFICAR QUE NO QUEDEN PROCESOS PYTHON DE METACORTEX
+    # PASO 5: MATAR ABSOLUTAMENTE TODO - BÚSQUEDA EXHAUSTIVA
     # ============================================================================
-    log_info "Verificando que no queden procesos..."
-    local remaining=$(ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact)" | grep -v grep | wc -l | tr -d ' ')
+    log_info "💀 MODO EXTERMINIO TOTAL: Matando absolutamente TODO..."
     
-    if [ "$remaining" -gt 0 ]; then
-        log_warning "Quedan $remaining procesos, limpiando..."
-        ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact)" | grep -v grep | awk '{print $2}' | xargs -I {} kill -9 {} 2>/dev/null || true
-        sleep 1
+    # 5.1: Matar TODOS los procesos Python relacionados con METACORTEX
+    log_info "   [1/6] Matando procesos Python de METACORTEX..."
+    pkill -9 -f "python.*metacortex" 2>/dev/null || true
+    pkill -9 -f "python.*neural" 2>/dev/null || true
+    pkill -9 -f "python.*unified" 2>/dev/null || true
+    pkill -9 -f "python.*emergency" 2>/dev/null || true
+    pkill -9 -f "python.*api_monetization" 2>/dev/null || true
+    pkill -9 -f "python.*telemetry" 2>/dev/null || true
+    pkill -9 -f "python.*web_interface" 2>/dev/null || true
+    
+    sleep 1
+    
+    # 5.2: Matar procesos zombie (defunct)
+    log_info "   [2/6] Eliminando procesos zombie (defunct)..."
+    local zombies=$(ps aux | grep defunct | grep -v grep | awk '{print $2}')
+    if [ -n "$zombies" ]; then
+        echo "$zombies" | xargs kill -9 2>/dev/null || true
+        log_success "      Zombies eliminados"
+    else
+        log_success "      No hay zombies"
     fi
     
+    # 5.3: Verificar procesos restantes (búsqueda exhaustiva)
+    log_info "   [3/6] Verificando procesos restantes..."
+    local remaining=$(ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact|api_monetization)" | grep -v grep | wc -l | tr -d ' ')
+    
+    if [ "$remaining" -gt 0 ]; then
+        log_warning "      ⚠️  Quedan $remaining procesos, matando con SIGKILL..."
+        ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact|api_monetization)" | grep -v grep | awk '{print $2}' | xargs -I {} kill -9 {} 2>/dev/null || true
+        sleep 2
+    fi
+    
+    # 5.4: Búsqueda más agresiva (cualquier Python en el proyecto)
+    log_info "   [4/6] Matando TODO Python en ${PROJECT_ROOT}..."
+    ps aux | grep "python.*${PROJECT_ROOT}" | grep -v grep | grep -v "metacortex_master.sh" | awk '{print $2}' | xargs -I {} kill -9 {} 2>/dev/null || true
+    
+    # 5.5: Segundo intento exhaustivo
+    log_info "   [5/6] Segunda pasada de limpieza exhaustiva..."
+    local remaining2=$(ps aux | grep -E "metacortex|neural_symbiotic|unified_startup|emergency_contact|api_monetization" | grep -v grep | grep -v "metacortex_master.sh" | wc -l | tr -d ' ')
+    
+    if [ "$remaining2" -gt 0 ]; then
+        log_warning "      ⚠️  AÚN QUEDAN $remaining2 PROCESOS. Matando TODO..."
+        ps aux | grep -E "metacortex|neural_symbiotic|unified_startup|emergency_contact|api_monetization" | grep -v grep | grep -v "metacortex_master.sh" | awk '{print $2}' | xargs -I {} kill -9 {} 2>/dev/null || true
+        sleep 2
+    fi
+    
+    # 5.6: Liberar TODOS los puertos de nuevo (por si acaso)
+    log_info "   [6/6] Liberando puertos (segunda pasada)..."
+    for port in 8000 8001 8080 8100 8200 9090 11434; do
+        local port_pid=$(lsof -ti:$port 2>/dev/null || true)
+        if [ -n "$port_pid" ]; then
+            log_warning "      ⚠️  Puerto $port aún ocupado (PID: $port_pid), matando..."
+            kill -9 $port_pid 2>/dev/null || true
+        fi
+    done
+    
     # ============================================================================
-    # PASO 5: LIMPIAR ARCHIVOS TEMPORALES Y PID
+    # PASO 6: LIMPIAR ARCHIVOS TEMPORALES Y PID
     # ============================================================================
-    log_info "Limpiando archivos temporales..."
+    log_info "🧹 Limpiando archivos temporales y PID..."
     find "$PROJECT_ROOT" -name "*.pid" -type f -delete 2>/dev/null || true
     find "$PROJECT_ROOT" -name "*.lock" -type f -delete 2>/dev/null || true
     rm -f "$DAEMON_PID_FILE" 2>/dev/null || true
+    rm -rf "${PROJECT_ROOT}/pid/"*.pid 2>/dev/null || true
     
     # ============================================================================
-    # PASO 6: VERIFICACIÓN FINAL
+    # PASO 7: VERIFICACIÓN FINAL ESTRICTA (0 PROCESOS O FALLA)
     # ============================================================================
-    local final_count=$(ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact)" | grep -v grep | wc -l | tr -d ' ')
+    log_info "🔍 Verificación final (debe ser 0 procesos)..."
+    
+    local final_count=$(ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact|api_monetization)" | grep -v grep | wc -l | tr -d ' ')
+    
     if [ "$final_count" -eq 0 ]; then
-        log_success "Todos los procesos METACORTEX (BASE + IA) detenidos (0 procesos restantes)"
+        log_success "✅ Todos los procesos METACORTEX detenidos (0 procesos restantes)"
+        
+        # Verificar puertos libres
+        log_info "🔍 Verificando puertos liberados..."
+        local ports_ok=true
+        for port in 8000 8001 8080 8100 8200 9090; do
+            if lsof -i:$port -sTCP:LISTEN > /dev/null 2>&1; then
+                log_error "⚠️  Puerto $port aún ocupado"
+                ports_ok=false
+            fi
+        done
+        
+        if [ "$ports_ok" = true ]; then
+            log_success "✅ Todos los puertos liberados"
+        else
+            log_warning "⚠️  Algunos puertos aún ocupados (posiblemente Ollama u otros servicios)"
+        fi
+        
     else
-        log_error "Aún quedan $final_count procesos activos"
-        ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact)" | grep -v grep
+        log_error "❌ ERROR: AÚN QUEDAN $final_count PROCESOS ACTIVOS:"
+        ps aux | grep -E "python.*(metacortex|neural_symbiotic|web_interface/server|unified_startup|emergency_contact|api_monetization)" | grep -v grep
+        echo ""
+        log_error "💀 PROCESOS ZOMBIE DETECTADOS - Ejecutar emergency_shutdown() si es necesario"
     fi
     
     log_success "Persistencia macOS desactivada"
-    print_header "✅ METACORTEX COMPLETO DETENIDO - SIN PROCESOS DUPLICADOS"
+    print_header "✅ METACORTEX COMPLETO DETENIDO - MODO NUCLEAR COMPLETADO"
 }
 
 emergency_shutdown() {
