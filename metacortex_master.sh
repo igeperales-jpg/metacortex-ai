@@ -889,11 +889,13 @@ start_system() {
     log_success "      Telemetry System STANDALONE iniciado (PID: $telemetry_pid)"
     
     # Emergency Contact System STANDALONE (puerto 8200) - Sistema de emergencia
-    log_info "   → Emergency Contact System STANDALONE (puerto 8200)..."
-    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/metacortex_sinaptico/emergency_contact_system.py" > "${LOGS_DIR}/emergency_contact_stdout.log" 2>&1 &
-    local emergency_pid=$!
-    echo "$emergency_pid" > "${PID_DIR}/emergency_contact.pid"
-    log_success "      Emergency Contact System STANDALONE iniciado (PID: $emergency_pid)"
+    # ⚠️ DESACTIVADO: unified_startup.py ya incluye Emergency Contact + Telegram Bot
+    # Mantenerlo aquí causaría conflicto 409 (multiple getUpdates)
+    log_info "   → Emergency Contact System: INTEGRADO en unified_startup.py (evitando duplicación)"
+    # nohup "$VENV_PYTHON" "${PROJECT_ROOT}/metacortex_sinaptico/emergency_contact_system.py" > "${LOGS_DIR}/emergency_contact_stdout.log" 2>&1 &
+    # local emergency_pid=$!
+    # echo "$emergency_pid" > "${PID_DIR}/emergency_contact.pid"
+    log_success "      Emergency Contact System: Ya activo en unified_startup.py (puerto 8080)"
     
     # API Monetization Server STANDALONE (puerto 8100) - Sistema de ingresos
     log_info "   → API Monetization Server STANDALONE (puerto 8100)..."
@@ -1273,14 +1275,16 @@ show_status() {
         echo -e "   ${RED}●${RESET} Telemetry System: No activo"
     fi
     
-    # Verificar Emergency Contact System
-    local emergency_count=$(pgrep -f "emergency_contact_system.py" 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$emergency_count" -gt 0 ]; then
-        local emergency_pid=$(pgrep -f "emergency_contact_system.py" 2>/dev/null | head -1)
-        echo -e "   ${GREEN}●${RESET} Emergency Contact System: Activo (PID: $emergency_pid, Puerto 8200)"
-        echo -e "   ${CYAN}     🌐 Portal: http://localhost:8200${RESET}"
+    # Verificar Emergency Contact System (integrado en unified_startup)
+    # ⚠️ NOTA: Emergency Contact ahora está integrado en unified_startup.py (puerto 8080)
+    # Ya no se ejecuta como standalone en puerto 8200
+    local unified_count=$(pgrep -f "unified_startup.py" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$unified_count" -gt 0 ]; then
+        echo -e "   ${GREEN}●${RESET} Emergency Contact System: INTEGRADO en Unified (Puerto 8080)"
+        echo -e "   ${CYAN}     🛡️ Telegram Bot: @metacortex_divine_bot${RESET}"
+        echo -e "   ${CYAN}     🌐 Web Form: http://localhost:8080${RESET}"
     else
-        echo -e "   ${RED}●${RESET} Emergency Contact System: No activo"
+        echo -e "   ${YELLOW}●${RESET} Emergency Contact System: Esperando unified_startup..."
     fi
     
     # Verificar API Monetization Server
