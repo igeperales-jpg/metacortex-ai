@@ -1,7 +1,3 @@
-import argparse
-import sys
-import time
-from .core import create_cognitive_agent
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -23,13 +19,10 @@ Características:
 Autor: Sistema METACORTEX v1.0
 Fecha: 1 octubre 2025
 """
-import logging
-
-logger = logging.getLogger(__name__)
-
-
 from __future__ import annotations
 
+import argparse
+import logging
 import os
 import random
 import re
@@ -40,6 +33,11 @@ from urllib.parse import quote_plus, unquote
 
 import requests  # type: ignore
 from bs4 import BeautifulSoup  # type: ignore
+
+from .core import create_cognitive_agent
+from .utils import setup_logging, clamp
+
+logger = logging.getLogger(__name__)
 
 # Type aliases
 SearchResult: TypeAlias = Dict[str, Any]
@@ -100,8 +98,6 @@ try:
     _arxiv_available = True
 except ImportError:
     print("⚠️ ArXiv no disponible. Instala: pip install arxiv")
-
-from .utils import setup_logging, clamp
 
 # Importar sistema de búsqueda avanzado
 try:

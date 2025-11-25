@@ -1,6 +1,6 @@
-from metacortex_sinaptico.affect import EmotionType
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 """
 METACORTEX - API FastAPI
 ========================
@@ -16,17 +16,12 @@ Endpoints:
 - GET /status: Estado del sistema
 """
 import logging
-
-logger = logging.getLogger(__name__)
-
-
-from __future__ import annotations
-
 import time
 from typing import Any, Optional, Dict, List
 
 from fastapi import APIRouter, HTTPException, Depends
 
+from .emotional_models import Emotion as EmotionType
 from .utils import (
     PerceptionInput,
     PerceptionOutput,
@@ -35,6 +30,8 @@ from .utils import (
     SystemStatus,
     setup_logging,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # === CONFIGURACIÓN ===

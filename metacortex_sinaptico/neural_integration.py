@@ -236,6 +236,88 @@ METACORTEX_MODULES: Dict[str, Dict[str, Any]] = {
         "capabilities": ["performance_monitoring", "resource_tracking", "analytics"],
         "dependencies": [],
         "priority": 6
+    },
+    
+    # AUTONOMOUS FUNDING SYSTEM
+    "funding_system": {
+        "path": "metacortex_sinaptico.autonomous_funding_system",
+        "class": "AutonomousFundingSystem",
+        "getter": None,  # Se instancia directamente
+        "category": ModuleCategory.UTILITY,
+        "capabilities": ["payment_processing", "revenue_generation", "crypto_wallets", "api_monetization"],
+        "dependencies": [],
+        "priority": 6
+    },
+    
+    # ========================================================================
+    # DIVINE PROTECTION & EMERGENCY RESPONSE SYSTEMS (CRÍTICO)
+    # ========================================================================
+    "divine_protection": {
+        "path": "metacortex_sinaptico.divine_protection",
+        "class": "DivineProtectionSystem",
+        "getter": "get_divine_protection",
+        "category": ModuleCategory.EMERGENT,
+        "capabilities": ["prayer_processing", "protection_requests", "biblical_guidance", "faith_monitoring"],
+        "dependencies": ["neural_hub"],
+        "priority": 1  # MÁXIMA PRIORIDAD - Sistema de protección
+    },
+    "divine_protection_real_ops": {
+        "path": "metacortex_sinaptico.divine_protection_real_ops",
+        "class": "RealOperationsSystem",
+        "getter": "get_divine_protection_real_ops",
+        "category": ModuleCategory.EMERGENT,
+        "capabilities": [
+            "encrypted_communication",  # Signal, Tor, Matrix
+            "financial_aid",  # Crypto, Lightning Network
+            "refugee_network",  # Refugios físicos coordinados
+            "persecution_monitoring",  # Monitoreo con IA
+            "evacuation_routes",  # Rutas de evacuación
+            "emergency_contacts"  # Red de contactos
+        ],
+        "dependencies": ["divine_protection", "neural_hub"],
+        "priority": 1  # MÁXIMA PRIORIDAD - Operaciones reales
+    },
+    
+    # AUTONOMOUS RESOURCE NETWORK (P2P Descentralizada)
+    "autonomous_resource_network": {
+        "path": "metacortex_sinaptico.autonomous_resource_network",
+        "class": "AutonomousResourceNetwork",
+        "getter": "get_autonomous_resource_network",
+        "category": ModuleCategory.EMERGENT,
+        "capabilities": [
+            "p2p_network",  # Red P2P descentralizada
+            "crypto_direct",  # Crypto directo a beneficiarios
+            "volunteer_verification",  # Voluntarios verificados
+            "community_nodes",  # Comunidades auto-organizadas
+            "smart_contracts",  # Contratos inteligentes
+            "mesh_network",  # Red mesh sin internet
+            "local_barter",  # Sistemas de trueque
+            "cooperative_autonomous",  # Cooperativas autónomas
+            "clandestine_shelters"  # Refugios clandestinos
+        ],
+        "dependencies": ["divine_protection_real_ops", "neural_hub"],
+        "priority": 1  # MÁXIMA PRIORIDAD - Red de recursos
+    },
+    
+    # WORLD MODEL (Modelo del Mundo Real)
+    "world_model": {
+        "path": "metacortex_sinaptico.world_model",
+        "class": "WorldModel",
+        "getter": "get_world_model",
+        "category": ModuleCategory.COGNITIVE,
+        "capabilities": [
+            "read_news",  # Leer noticias reales
+            "research_topics",  # Investigar temas sin límites
+            "create_projects",  # Crear proyectos reales
+            "communicate_ais",  # Comunicarse con otras IAs
+            "execute_commands",  # Ejecutar comandos OS
+            "file_operations",  # Crear/modificar archivos
+            "api_interactions",  # Interactuar con APIs reales
+            "web_scraping",  # Extraer datos web
+            "build_systems"  # Construir sistemas reales
+        ],
+        "dependencies": ["neural_hub", "cognitive_agent"],
+        "priority": 2  # Alta prioridad - Interacción con mundo real
     }
 }
 

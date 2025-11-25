@@ -32,27 +32,23 @@ detectar fallos antes de que ocurran, aprender de errores pasados y
 continuamente mejorar sus estrategias. Es el "ojo interno" que observa
 y optimiza todos los demás procesos cognitivos.
 """
-import logging
-
-logger = logging.getLogger(__name__)
-
-
 from __future__ import annotations
 
-import time
+import logging
 import math
-from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
-from dataclasses import dataclass, field
+import random
+import time
 from collections import defaultdict
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from neural_symbiotic_network import MetacortexNeuralSymbioticNetworkV2
 
 from .utils import setup_logging
-import random
-import random
 
+logger = logging.getLogger(__name__)
 logger = setup_logging()
 
 

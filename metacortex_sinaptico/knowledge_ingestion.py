@@ -1,5 +1,3 @@
-import asyncio
-from .learning import StructuralLearningSystem
 # -*- coding: utf-8 -*-
 """
 🌍 METACORTEX Knowledge Ingestion Engine
@@ -24,26 +22,21 @@ Fuentes de conocimiento:
 
 METACORTEX Project - 2025
 """
-
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-import time
 import re
-from typing import Dict, Any, List, Optional, Set, Union, Tuple
-from datetime import datetime, timedelta
-from pathlib import Path
+import sys
+import time
 from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Importaciones de METACORTEX
 from .learning import StructuralLearningSystem
-
-# Importar motor de búsqueda
-import sys
-
-sys.path.append(str(Path(__file__).parent.parent))
 from internet_search import MetacortexAdvancedSearch
 
 logger = logging.getLogger(__name__)
@@ -89,11 +82,11 @@ class KnowledgeSource:
 
     async def fetch(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Obtener conocimiento de la fuente"""
-        raise NotImplementedError(f"Debe implementarse este método")
+        raise NotImplementedError("Debe implementarse este método")
 
     def extract_concepts(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extraer conceptos estructurados del conocimiento"""
-        raise NotImplementedError(f"Debe implementarse el método extract_concepts")
+        raise NotImplementedError("Debe implementarse el método extract_concepts")
     
     def get_quality_score(self) -> float:
         """Calcula score de calidad de la fuente basado en éxito vs errores."""

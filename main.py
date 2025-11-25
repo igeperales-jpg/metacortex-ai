@@ -55,9 +55,15 @@ async def main():
         logger.info("🧠 Inicializando el núcleo cognitivo...")
         cognitive_agent = get_cognitive_agent()
 
-        # 3. Proporcionar las capacidades al agente
-        cognitive_agent.set_capabilities(capabilities)
-        logger.info("✅ Capacidades inyectadas en el núcleo cognitivo.")
+        # 3. Registrar el CapabilityManager en la red neuronal del agente
+        if hasattr(cognitive_agent, "neural_network") and cognitive_agent.neural_network:
+            cognitive_agent.neural_network.register_module(
+                "capability_manager",
+                capability_manager
+            )
+            logger.info("✅ CapabilityManager registrado en la red neuronal del núcleo cognitivo.")
+        else:
+            logger.warning("⚠️ No se pudo registrar CapabilityManager: red neuronal no disponible.")
 
         # 4. Iniciar el ciclo de vida del agente
         logger.info("✨ El agente cognitivo ha tomado el control. Iniciando ciclo de vida...")

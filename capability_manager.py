@@ -95,7 +95,16 @@ class CapabilityManager:
         """
         Obtiene una capacidad por su nombre.
         """
-        return self.capabilities.get(name)
+        capability = self.capabilities.get(name)
+        if not capability:
+            self.logger.warning(f"Intento de acceso a capacidad no encontrada o no inicializada: '{name}'")
+        return capability
+
+    def get_all_capabilities(self) -> Dict[str, Capability]:
+        """
+        Retorna un diccionario con todas las capacidades cargadas.
+        """
+        return self.capabilities
 
     def get_all_statuses(self) -> Dict[str, Any]:
         """

@@ -1,27 +1,79 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-METACORTEX - MaterializationEngine v1.0
-========================================
 
-Motor de materialización de pensamientos METACORTEX en código:
-- Convierte decisiones cognitivas en código ejecutable
-- Genera agentes especializados autónomamente
-- Implementa mejoras del sistema automáticamente
-- Modo de desarrollo autónomo continuo
-
-Autor: METACORTEX Evolution Team
-Fecha: 2025-01-16
-"""
-
-import logging
+import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+import logging
+import asyncio
+from typing import Dict, Any, List, Optional, Union, Callable
+from enum import Enum
+from dataclasses import dataclass, field
 import time
+import json
+import os
+import re
+import traceback
 
-from .template_system import get_template_system
-from .language_handlers import LanguageHandlerRegistry
-from .project_analyzer import ProjectAnalyzer
+# Solución para el problema de importación relativa cuando se carga dinámicamente
+# Añadir el directorio padre ('agent_modules') a sys.path
+sys.path.append(str(Path(__file__).parent))
+
+from template_system import get_template_system
+
+
+"""
+Materialization Engine v3.0 - Motor de Materialización de Código
+================================================================
+
+Este módulo es responsable de "materializar" planes y conceptos abstractos
+en código funcional, archivos de configuración, y otros artefactos concretos.
+
+Características Principales:
+- Traducción de planes abstractos a código.
+- Generación de código multi-lenguaje usando plantillas.
+- Integración con el sistema de memoria para contexto.
+- Capacidad de auto-corrección y validación.
+- Interacción con el sistema de archivos del workspace.
+"""
+
+# Configuración del logger
+logger = logging.getLogger(__name__)
+
+# Lazy import para evitar ciclos de dependencia
+if 'neural_symbiotic_network' not in sys.modules:
+    from neural_symbiotic_network import get_neural_network, MetacortexNeuralSymbioticNetworkV2
+if 'project_analyzer' not in sys.modules:
+    from project_analyzer import ProjectAnalyzer
+if 'workspace_scanner' not in sys.modules:
+    from workspace_scanner import WorkspaceScanner
+if 'code_generator' not in sys.modules:
+    from code_generator import CodeGenerator
+if 'code_quality_enforcer' not in sys.modules:
+    from code_quality_enforcer import CodeQualityEnforcer
+if 'continuous_validation' not in sys.modules:
+    from continuous_validation import ContinuousValidationSystem
+if 'self_repair_workshop' not in sys.modules:
+    from self_repair_workshop import SelfRepairWorkshop
+if 'advanced_testing_lab' not in sys.modules:
+    from advanced_testing_lab import AdvancedTestingLab
+if 'quality_integration_system' not in sys.modules:
+    from quality_integration_system import QualityIntegrationSystem
+if 'ai_programming_evolution' not in sys.modules:
+    from ai_programming_evolution import AIProgrammingEvolution
+if 'language_handlers' not in sys.modules:
+    from language_handlers import LanguageHandler, get_language_handler_registry
+if 'telemetry' not in sys.modules:
+    from telemetry import get_telemetry as get_telemetry_system, Telemetry as TelemetrySystem
+if 'security' not in sys.modules:
+    from security import SecuritySystem as SecurityModule
+if 'resilience' not in sys.modules:
+    from resilience import CircuitBreaker as ResilienceModule
+if 'autoscaling' not in sys.modules:
+    from autoscaling import AutoScalingSystem as AutoscalingModule
+if 'distributed_cache' not in sys.modules:
+    from distributed_cache import DistributedCacheSystem as DistributedCache
+if 'event_sourcing' not in sys.modules:
+    from event_sourcing import EventStore as EventSourcingModule
 
 
 class MaterializationEngine:
@@ -138,7 +190,7 @@ class MaterializationEngine:
         agent_purpose = thought.get("description", "Specialized agent")
         agent_capabilities = thought.get("capabilities", [])
 
-        # 🚀 USAR CODE_GENERATOR para generar código inteligente con LLM
+        # 🚀 USAR CODE_GENERATOR PARA GENERAR CÓDIGO INTELIGENTE CON LLM
         try:
             # Preparar prompt para LLM
             prompt = f"""Genera un agente Python especializado con las siguientes especificaciones:
@@ -462,7 +514,7 @@ Módulo objetivo: {target_module}
 
 La funcionalidad debe:
 1. Ser completamente funcional y testeable
-2. Incluir docstrings detallados
+2. Incluir docstrings detalladas
 3. Manejar errores apropiadamente
 4. Seguir mejores prácticas de Python
 5. Incluir type hints
@@ -493,6 +545,7 @@ Genera código production-ready."""
                 else:
                     # Fallback a template
                     feature_code = self._generate_feature_template(feature_name, feature_description)
+                    self.logger.warning("   ⚠️ Usando template - generación falló")
             else:
                 feature_code = self._generate_feature_template(feature_name, feature_description)
                 

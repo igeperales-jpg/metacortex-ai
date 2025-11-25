@@ -1,6 +1,6 @@
-from metacortex_sinaptico.db import MetacortexDB
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 """
 METACORTEX - Memory Wrapper Avanzado
 ====================================
@@ -9,18 +9,18 @@ Wrapper para MemorySystem con inicialización automática, cache inteligente,
 compresión, indexación y búsqueda semántica.
 """
 
-from __future__ import annotations
-
-import logging
-import time
 import hashlib
+import logging
 import pickle
-import zlib
-from pathlib import Path
-from typing import Dict, Any, Optional
-from dataclasses import dataclass, field
-from collections import OrderedDict
 import threading
+import time
+import zlib
+from collections import OrderedDict
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+from metacortex_sinaptico.db import MetacortexDB
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
+import networkx as nx  # type: ignore
+import pickle
+import json
+import time
+import math
+from pathlib import Path
+from typing import Dict, List, Any, Optional, Set, Tuple
+from collections import defaultdict, Counter
+from heapq import nlargest
+import logging
+
+from .utils import setup_logging
+from networkx.drawing.nx_pydot import write_dot
+from networkx.readwrite import json_graph
+
 """
 METACORTEX - Sistema de Grafos Jerárquicos
 ==========================================
@@ -14,26 +31,6 @@ Arquitectura:
 - Índice Global: Mapeo de todos los conceptos a sus ubicaciones
 - Promoción/Degradación: Movimiento automático entre niveles
 """
-import logging
-
-logger = logging.getLogger(__name__)
-
-
-from __future__ import annotations
-
-import networkx as nx  # type: ignore
-import pickle
-import json
-import time
-import math
-from pathlib import Path
-from typing import Dict, List, Any, Optional, Set, Tuple
-from collections import defaultdict, Counter
-from heapq import nlargest
-
-from .utils import setup_logging
-from networkx.drawing.nx_pydot import write_dot
-from networkx.readwrite import json_graph
 
 logger = setup_logging()
 

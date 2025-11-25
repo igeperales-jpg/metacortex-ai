@@ -1,6 +1,30 @@
-import community as community_louvain  # python-louvain
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
+import community as community_louvain  # python-louvain
+import random
+import time
+import logging
+from typing import Dict, List, Optional, Any, Tuple, Set
+from collections import defaultdict
+from dataclasses import dataclass, field
+import subprocess
+import time as time_module
+from itertools import islice
+import math
+
+try:
+    import networkx as nx  # type: ignore
+except ImportError:
+    print("⚠️ NetworkX no disponible. Instalando...")
+    subprocess.check_call(["pip", "install", "networkx"])
+    import networkx as nx  # type: ignore
+
+from .utils import setup_logging
+from .hierarchical_graph import HierarchicalKnowledgeGraph
+
+
 """
 🧠 ADVANCED LEARNING SYSTEM 2026 - Aprendizaje Multi-Nivel
 ===========================================================
@@ -34,32 +58,6 @@ entre dominios, y optimiza sus propias estrategias de aprendizaje. La integraci�
 con BDI y Curiosity permite exploración dirigida por objetivos y descubrimiento
 autónomo de patrones emergentes.
 """
-
-from __future__ import annotations
-
-import random
-import time
-import logging
-from typing import Dict, List, Optional, Any, Tuple, Set
-from collections import defaultdict
-from dataclasses import dataclass, field
-
-try:
-    import networkx as nx  # type: ignore
-except ImportError:
-    print("⚠️ NetworkX no disponible. Instalando...")
-    import subprocess
-
-    subprocess.check_call(["pip", "install", "networkx"])
-    import networkx as nx  # type: ignore
-
-from .utils import setup_logging
-from .hierarchical_graph import HierarchicalKnowledgeGraph
-import time as time_module
-from itertools import islice
-import time as time_module
-import math
-
 
 logger = setup_logging()
 

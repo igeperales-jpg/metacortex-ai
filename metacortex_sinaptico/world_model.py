@@ -18,8 +18,9 @@ Este módulo permite a METACORTEX:
 import os
 import json
 import subprocess
+import asyncio
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Callable
 from datetime import datetime
 from enum import Enum
 import logging
@@ -354,6 +355,29 @@ class WorldModel:
             f"✅ Investigación completa: {len(sources_consulted)} fuentes"
         )
         return research_result
+
+    async def execute_action(self, action: RealAction) -> Dict[str, Any]:
+        """Ejecuta una RealAction y devuelve el resultado."""
+        action_map: Dict[ActionType, Callable[..., Any]] = {
+            ActionType.READ_NEWS: self.read_real_news,
+            ActionType.RESEARCH_TOPIC: self.research_topic_deeply,
+            ActionType.CREATE_FILE: self.create_real_file,
+            ActionType.EXECUTE_COMMAND: self.execute_real_command,
+            ActionType.CONTACT_AI: self.contact_external_ai,
+            ActionType.CREATE_PROJECT: self.create_autonomous_project,
+        }
+
+        action_func = action_map.get(action.action_type)
+
+        if action_func:
+            # Las funciones asíncronas necesitan 'await'
+            if asyncio.iscoroutinefunction(action_func):
+                 return await action_func(**action.parameters)
+            else:
+                 return action_func(**action.parameters)
+        else:
+            logger.error(f"❌ Acción no implementada en WorldModel: {action.action_type}")
+            return {"success": False, "error": f"Action '{action.action_type}' not implemented."}
 
     def execute_real_command(self, command: str, cwd: Optional[str] = None) -> Dict[str, Any]:
         """💻 Ejecuta un comando REAL en el sistema operativo."""
@@ -733,3 +757,31 @@ if __name__ == "__main__":
             expected_outcome="Expand knowledge",
             safety_level=1.0,
         )
+
+
+# ============================================================================
+# GLOBAL INSTANCE FOR NEURAL NETWORK INTEGRATION
+# ============================================================================
+
+_global_world_model: Optional[WorldModel] = None
+
+
+def get_world_model() -> WorldModel:
+    """
+    Obtiene la instancia global del World Model.
+    Se inicializa lazy en el primer acceso.
+    
+    Returns:
+        Instancia global de WorldModel
+    """
+    global _global_world_model
+    if _global_world_model is None:
+        logger.info("🌍 Inicializando World Model global...")
+        try:
+            _global_world_model = WorldModel()
+            logger.info("✅ World Model inicializado")
+        except Exception as e:
+            logger.error(f"❌ Error inicializando World Model: {e}")
+            # Crear instancia mínima
+            _global_world_model = WorldModel()
+    return _global_world_model
