@@ -34,32 +34,30 @@ VERSIÓN: 1.0.0 - Full Consciousness Edition
 """
 
 import ast
-import hashlib
 import json
 import logging
 import os
 import shutil
-import subprocess
-import sys
-import tempfile
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 
-# Importar componentes del sistema
+# Importar componentes del sistema con type ignores
 try:
     from self_improvement_system import SelfImprovementSystem
     SELF_IMPROVEMENT_AVAILABLE = True
 except ImportError:
+    SelfImprovementSystem = None  # type: ignore
     SELF_IMPROVEMENT_AVAILABLE = False
     logging.warning("self_improvement_system not available")
 
 try:
-    from programming_agent import ProgrammingAgent
+    from programming_agent import get_programming_agent
     PROGRAMMING_AGENT_AVAILABLE = True
 except ImportError:
+    get_programming_agent = None  # type: ignore
     PROGRAMMING_AGENT_AVAILABLE = False
     logging.warning("programming_agent not available")
 
@@ -67,6 +65,7 @@ try:
     from metacortex_sinaptico.core import CognitiveAgent
     COGNITIVE_AGENT_AVAILABLE = True
 except ImportError:
+    CognitiveAgent = None  # type: ignore
     COGNITIVE_AGENT_AVAILABLE = False
     logging.warning("CognitiveAgent not available")
 
@@ -74,20 +73,18 @@ try:
     from metacortex_sinaptico.world_model import WorldModel
     WORLD_MODEL_AVAILABLE = True
 except ImportError:
+    WorldModel = None  # type: ignore
     WORLD_MODEL_AVAILABLE = False
     logging.warning("WorldModel not available")
 
-try:
-    from metacortex_sinaptico.tool_manager import ToolManager
-    TOOL_MANAGER_AVAILABLE = True
-except ImportError:
-    TOOL_MANAGER_AVAILABLE = False
-    logging.warning("ToolManager not available")
+# Tool manager no existe - usar programming_agent como alternativa
+TOOL_MANAGER_AVAILABLE = False
 
 try:
     from memory_system import get_memory_system
     MEMORY_SYSTEM_AVAILABLE = True
 except ImportError:
+    get_memory_system = None  # type: ignore
     MEMORY_SYSTEM_AVAILABLE = False
     logging.warning("memory_system not available")
 
@@ -160,17 +157,17 @@ class MetacortexConsciousness:
             if SELF_IMPROVEMENT_AVAILABLE:
                 try:
                     logger.info("   🔍 Loading Self-Improvement System...")
-                    self.self_improvement = SelfImprovementSystem(str(self.project_root))
+                    self.self_improvement = SelfImprovementSystem(self.project_root)
                     logger.info("      ✅ Self-Improvement System loaded")
                     self.consciousness_level += 20
                 except Exception as e:
                     logger.error(f"      ❌ Error loading Self-Improvement: {e}")
             
             # 2. Programming Agent
-            if PROGRAMMING_AGENT_AVAILABLE:
+            if PROGRAMMING_AGENT_AVAILABLE and get_programming_agent:
                 try:
                     logger.info("   ✍️  Loading Programming Agent...")
-                    self.programming_agent = ProgrammingAgent()
+                    self.programming_agent = get_programming_agent()
                     logger.info("      ✅ Programming Agent loaded")
                     self.consciousness_level += 20
                 except Exception as e:
@@ -196,18 +193,18 @@ class MetacortexConsciousness:
                 except Exception as e:
                     logger.error(f"      ❌ Error loading World Model: {e}")
             
-            # 5. Tool Manager
-            if TOOL_MANAGER_AVAILABLE:
+            # 5. Tool Manager (usando programming_agent como ejecutor de herramientas)
+            if self.programming_agent:
                 try:
-                    logger.info("   🛠️  Loading Tool Manager...")
-                    self.tool_manager = ToolManager()
+                    logger.info("   🛠️  Tool Manager via Programming Agent...")
+                    self.tool_manager = self.programming_agent  # Programming agent tiene capacidades de ejecución
                     logger.info("      ✅ Tool Manager loaded (MANOS Y PIES)")
                     self.consciousness_level += 15
                 except Exception as e:
                     logger.error(f"      ❌ Error loading Tool Manager: {e}")
             
             # 6. Memory System
-            if MEMORY_SYSTEM_AVAILABLE:
+            if MEMORY_SYSTEM_AVAILABLE and get_memory_system:
                 try:
                     logger.info("   💾 Loading Memory System...")
                     self.memory_system = get_memory_system()
@@ -281,7 +278,7 @@ class MetacortexConsciousness:
                         try:
                             with open(file_path, 'r') as f:
                                 structure["total_lines"] += len(f.readlines())
-                        except:
+                        except Exception:
                             pass
         except Exception as e:
             logger.error(f"Error analyzing project structure: {e}")
