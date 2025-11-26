@@ -276,11 +276,17 @@ def _create_autonomous_orchestrator(models_dir: Path = None, max_parallel_tasks:
         orchestrator = AutonomousModelOrchestrator(
             models_dir=models_dir,
             max_parallel_tasks=max_parallel_tasks,
-            enable_auto_task_generation=False  # Deshabilitado por defecto
+            enable_auto_task_generation=True  # ✅ MODO AUTÓNOMO ACTIVADO - Toma decisiones y ejecuta
         )
         
-        # Inicializar sin auto-task-generation para evitar circular deps
+        # Inicializar con auto-task-generation para operación autónoma REAL
         orchestrator._discover_models()
+        orchestrator._start_execution_threads()  # ✅ Inicia el executor + generator loops automáticamente
+        
+        logger.info("🚀 Autonomous Orchestrator iniciado en MODO TOTALMENTE AUTÓNOMO")
+        logger.info("   ✅ enable_auto_task_generation: TRUE")
+        logger.info("   ✅ Task Executor Loop: ACTIVO")
+        logger.info("   ✅ Task Generator Loop: ACTIVO")
         
         return orchestrator
         
