@@ -265,8 +265,15 @@ def _create_telegram_bot():
         return None
 
 
-def _create_autonomous_orchestrator(models_dir: Path = None, max_parallel_tasks: int = 50):
-    """Factory para Autonomous Model Orchestrator."""
+def _create_autonomous_orchestrator(models_dir: Path = None, max_parallel_tasks: int = 50, auto_start: bool = False):
+    """
+    Factory para Autonomous Model Orchestrator.
+    
+    Args:
+        models_dir: Directorio de modelos ML
+        max_parallel_tasks: Número máximo de tareas paralelas
+        auto_start: Si True, inicia los loops automáticamente (solo desde Dashboard Enterprise)
+    """
     try:
         from autonomous_model_orchestrator import AutonomousModelOrchestrator
         
@@ -279,14 +286,20 @@ def _create_autonomous_orchestrator(models_dir: Path = None, max_parallel_tasks:
             enable_auto_task_generation=True  # ✅ MODO AUTÓNOMO ACTIVADO - Toma decisiones y ejecuta
         )
         
-        # Inicializar con auto-task-generation para operación autónoma REAL
-        orchestrator._discover_models()
-        orchestrator._start_execution_threads()  # ✅ Inicia el executor + generator loops automáticamente
+        logger.info("🏭 Autonomous Orchestrator creado (modo autónomo configurado)")
+        logger.info(f"   ℹ️  auto_start={auto_start}")
         
-        logger.info("🚀 Autonomous Orchestrator iniciado en MODO TOTALMENTE AUTÓNOMO")
-        logger.info("   ✅ enable_auto_task_generation: TRUE")
-        logger.info("   ✅ Task Executor Loop: ACTIVO")
-        logger.info("   ✅ Task Generator Loop: ACTIVO")
+        # SOLO inicializar si auto_start=True (llamado desde Dashboard Enterprise)
+        if auto_start:
+            orchestrator._discover_models()
+            orchestrator._start_execution_threads()  # ✅ Inicia el executor + generator loops automáticamente
+            
+            logger.info("🚀 Autonomous Orchestrator INICIADO en MODO TOTALMENTE AUTÓNOMO")
+            logger.info("   ✅ enable_auto_task_generation: TRUE")
+            logger.info("   ✅ Task Executor Loop: ACTIVO")
+            logger.info("   ✅ Task Generator Loop: ACTIVO")
+        else:
+            logger.info("   ⏸️  Orchestrator creado pero NO iniciado (esperando llamada explícita)")
         
         return orchestrator
         

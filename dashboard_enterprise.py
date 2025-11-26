@@ -102,12 +102,25 @@ manager = ConnectionManager()
 # ═══════════════════════════════════════════════════════════════════════════
 
 def get_orchestrator():
-    """Obtiene instancia del orchestrator via singleton registry."""
+    """
+    Obtiene instancia del orchestrator via singleton registry.
+    Asegura que el orchestrator esté completamente iniciado en modo autónomo.
+    """
     if not SINGLETON_AVAILABLE:
         return None
     
     try:
-        return get_autonomous_orchestrator()
+        # Obtener orchestrator con auto_start=True para activar modo autónomo
+        orchestrator = get_autonomous_orchestrator(auto_start=True)
+        
+        # Verificar que esté inicializado
+        if orchestrator and not orchestrator.is_running:
+            logger.info("🚀 Iniciando Autonomous Orchestrator en modo autónomo...")
+            orchestrator._discover_models()
+            orchestrator._start_execution_threads()
+            logger.info("✅ Orchestrator iniciado completamente")
+        
+        return orchestrator
     except Exception as e:
         logger.error(f"Error getting orchestrator: {e}")
         return None

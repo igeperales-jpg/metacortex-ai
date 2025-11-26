@@ -50,7 +50,10 @@ class MetacortexUnifiedOrchestrator:
         self._lock = threading.RLock()
     
     def initialize(self) -> bool:
-        """Inicializa todos los componentes."""
+        """
+        Inicializa el orchestrador COORDINADOR (NO inicializa los subsistemas).
+        Los subsistemas deben ser inicializados externamente para evitar loops.
+        """
         with self._lock:
             if self.is_initialized:
                 return True
@@ -59,39 +62,39 @@ class MetacortexUnifiedOrchestrator:
                 logger.error("❌ Singleton registry not available")
                 return False
             
-            logger.info("🚀 Initializing METACORTEX Unified System...")
+            logger.info("🚀 Initializing METACORTEX Unified Coordinator...")
             
+            # SOLO obtener referencias, NO inicializar
             try:
-                logger.info("   🧠 Loading Autonomous Orchestrator...")
+                logger.info("   🧠 Getting Autonomous Orchestrator reference...")
                 self.autonomous_orchestrator = get_autonomous_orchestrator()
                 if self.autonomous_orchestrator:
-                    if not self.autonomous_orchestrator.is_running:
-                        self.autonomous_orchestrator.initialize()
-                    logger.info(f"      ✅ {len(self.autonomous_orchestrator.model_profiles)} ML models loaded")
+                    logger.info(f"      ✅ Reference obtained: {len(self.autonomous_orchestrator.model_profiles)} ML models")
             except Exception as e:
-                logger.error(f"      ❌ Autonomous orchestrator error: {e}")
+                logger.warning(f"      ⚠️  Autonomous orchestrator not yet available: {e}")
             
             try:
-                logger.info("   ⚙️  Loading ML Pipeline...")
+                logger.info("   ⚙️  Getting ML Pipeline reference...")
                 self.ml_pipeline = get_ml_pipeline()
                 if self.ml_pipeline:
-                    logger.info("      ✅ ML Pipeline connected")
+                    logger.info("      ✅ Reference obtained")
             except Exception as e:
-                logger.error(f"      ❌ ML Pipeline error: {e}")
+                logger.warning(f"      ⚠️  ML Pipeline not yet available: {e}")
             
             try:
-                logger.info("   🦙 Loading Ollama...")
+                logger.info("   🦙 Getting Ollama reference...")
                 self.ollama = get_ollama()
                 if self.ollama:
-                    logger.info("      ✅ Ollama connected")
+                    logger.info("      ✅ Reference obtained")
             except Exception as e:
-                logger.error(f"      ❌ Ollama error: {e}")
+                logger.warning(f"      ⚠️  Ollama not yet available: {e}")
             
             self.is_initialized = True
             self.is_running = True
             self.start_time = datetime.now()
             
-            logger.info("✅ METACORTEX UNIFIED SYSTEM INITIALIZED")
+            logger.info("✅ METACORTEX UNIFIED COORDINATOR INITIALIZED")
+            logger.info("   ℹ️  Subsystems are managed externally (Dashboard Enterprise)")
             return True
 
     def process_user_request(self, request: str):

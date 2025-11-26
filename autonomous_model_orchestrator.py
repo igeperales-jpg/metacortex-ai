@@ -686,8 +686,24 @@ class AutonomousModelOrchestrator:
         with open(model_path, 'rb') as f:
             model = pickle.load(f)
         
+        # Obtener número de features que espera el modelo
+        model_profile = self.model_profiles.get(model_id)
+        expected_features = model_profile.num_features if model_profile else None
+        
         # Preparar features
         features = np.array(task.input_data.get("features", []))
+        
+        # 🔧 AJUSTAR features al tamaño esperado por el modelo
+        if expected_features and features.shape[1] != expected_features:
+            logger.warning(f"⚠️  Adjusting features from {features.shape[1]} to {expected_features} for {model_id}")
+            
+            if features.shape[1] > expected_features:
+                # Reducir features (tomar las primeras N)
+                features = features[:, :expected_features]
+            else:
+                # Expandir features (padding con zeros)
+                padding = np.zeros((features.shape[0], expected_features - features.shape[1]))
+                features = np.hstack([features, padding])
         
         # Predicción
         prediction = model.predict(features)
@@ -695,7 +711,8 @@ class AutonomousModelOrchestrator:
         return {
             "prediction": prediction.tolist(),
             "model_id": model_id,
-            "source": "ml_model"
+            "source": "ml_model",
+            "features_adjusted": features.shape[1]
         }
     
     def add_task(self, task: Task):

@@ -1066,32 +1066,21 @@ start_system() {
     sleep 3
     
     # ============================================================================
-    # PASO 8: INICIAR ORCHESTRATOR (COORDINADOR DE AGENTES) - CON MPS
+    # PASO 8: ORCHESTRATOR (INTEGRADO EN DASHBOARD ENTERPRISE)
     # ============================================================================
-    log_info "Iniciando METACORTEX Agent Orchestrator (Apple Silicon M4)..."
-    
-    # Mantener variables MPS para orchestrator
-    export PYTORCH_ENABLE_MPS_FALLBACK=1
-    export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
-    export MPS_FORCE_ENABLE=1
-    
-    nohup caffeinate -i "$VENV_PYTHON" "$STARTUP_ORCHESTRATOR" > "${LOGS_DIR}/startup_orchestrator.log" 2>&1 &
-    local orchestrator_pid=$!
-    
-    # Guardar PID de caffeinate (que envuelve al orchestrator)
-    echo "$orchestrator_pid" > "${PROJECT_ROOT}/caffeinate.pid"
-    
-    log_success "Agent Orchestrator iniciado (PID: $orchestrator_pid)"
-    log_info "   ✅ Sistema METACORTEX: INICIALIZANDO EN 5 FASES"
-    log_info "   ✅ Garantía: TODOS los servicios activos"
-    log_info "   ✅ Health checks: ANTES DE CONTINUAR"
-    
+    # NOTA: El Autonomous Orchestrator ahora está integrado en dashboard_enterprise.py
+    # No es necesario iniciarlo por separado para evitar loops de inicialización
+    log_info "Agent Orchestrator integrado en Dashboard Enterprise..."
+    log_info "   ℹ️  Orchestrator se iniciará automáticamente con el Dashboard"
+    log_info "   ℹ️  Modo autónomo: ACTIVADO (enable_auto_task_generation=True)"
+    log_info "   ℹ️  965 modelos ML disponibles"
+
     # ============================================================================
     # PASO 9: MONITOREAR EL STARTUP (VER LOGS EN TIEMPO REAL)
     # ============================================================================
     log_info "Monitoreando inicialización..."
     log_info "   Daemon logs: tail -f ${LOGS_DIR}/metacortex_daemon_military.log"
-    log_info "   Orchestrator logs: tail -f ${LOGS_DIR}/startup_orchestrator.log"
+    log_info "   Dashboard logs: tail -f ${LOGS_DIR}/dashboard_enterprise.log"
     log_info "   AI Systems logs: tail -f ${LOGS_DIR}/unified_system.log"
     
     sleep 3
