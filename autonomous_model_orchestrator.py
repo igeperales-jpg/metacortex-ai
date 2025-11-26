@@ -737,19 +737,21 @@ class AutonomousModelOrchestrator:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 🌐 MODULE-LEVEL EXPORTS (NO GLOBAL INSTANCE)
+# 🌐 GLOBAL INSTANCE & UTILITIES
 # ═══════════════════════════════════════════════════════════════════════════
-# IMPORTANTE: NO crear instancia global aquí para evitar circular imports
-# La instancia se maneja EXCLUSIVAMENTE desde singleton_registry.py
 
-__all__ = [
-    'AutonomousModelOrchestrator',
-    'ModelSpecialization',
-    'ModelProfile',
-    'Task',
-    'TaskPriority',
-    'TaskStatus'
-]
+_global_orchestrator: Optional[AutonomousModelOrchestrator] = None
+
+
+def get_autonomous_orchestrator(**kwargs) -> AutonomousModelOrchestrator:
+    """Obtiene instancia global del orquestador."""
+    global _global_orchestrator
+    
+    if _global_orchestrator is None:
+        _global_orchestrator = AutonomousModelOrchestrator(**kwargs)
+        _global_orchestrator.initialize()
+    
+    return _global_orchestrator
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -767,13 +769,10 @@ def main():
     print("🤖 AUTONOMOUS MODEL ORCHESTRATOR - TEST")
     print("=" * 80 + "\n")
     
-    # USAR SINGLETON REGISTRY (no crear instancia directa)
-    from singleton_registry import get_autonomous_orchestrator
-    
-    # Inicializar via singleton
+    # Inicializar
     orchestrator = get_autonomous_orchestrator(
         max_parallel_tasks=10,
-        enable_auto_task_generation=False  # Desactivar para testing
+        enable_auto_task_generation=True
     )
     
     # Status inicial
@@ -793,10 +792,10 @@ def main():
     
     orchestrator.add_task(test_task)
     
-    print("\n⏳ Running for 10 seconds (test mode)...")
+    print("\n⏳ Running for 60 seconds...")
     try:
         import time
-        time.sleep(10)
+        time.sleep(60)
         
         # Status final
         final_status = orchestrator.get_status()

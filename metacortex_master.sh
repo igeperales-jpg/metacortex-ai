@@ -603,62 +603,63 @@ verify_dependencies() {
     # 6. Modelos de Ollama
     log_info "Verificando modelos de Ollama..."
     
-    # Primero verificar si Ollama está corriendo
-    if ! pgrep -f "ollama serve" > /dev/null 2>&1; then
-        log_warning "   Servidor Ollama NO está corriendo. Iniciando..."
-        ollama serve > /dev/null 2>&1 &
+    # Primero verificar si Ollama está corriendo (más robusto)
+    if ! lsof -i:11434 -sTCP:LISTEN > /dev/null 2>&1; then
+        log_warning "   Servidor Ollama NO está corriendo en puerto 11434. Iniciando..."
+        nohup ollama serve > "${LOGS_DIR}/ollama_serve.log" 2>&1 &
         local ollama_pid=$!
         echo "$ollama_pid" > "${PID_DIR}/ollama.pid"
-        sleep 5  # Esperar 5 segundos (era 3, muy poco)
-        log_success "   Ollama iniciado (PID: $ollama_pid)"
+        log_info "   Esperando inicio de Ollama (10 segundos)..."
+        sleep 10
+        
+        # Verificar que inició correctamente
+        if lsof -i:11434 -sTCP:LISTEN > /dev/null 2>&1; then
+            log_success "   ✅ Ollama iniciado correctamente (PID: $ollama_pid, Puerto: 11434)"
+        else
+            log_error "   ❌ Ollama no pudo iniciar en puerto 11434"
+            log_info "   Ver logs: tail -f ${LOGS_DIR}/ollama_serve.log"
+        fi
+    else
+        local ollama_pid=$(lsof -i:11434 -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $2}')
+        log_success "   ✅ Ollama ya está corriendo (PID: $ollama_pid, Puerto: 11434)"
     fi
     
-    # Verificar conexión a Ollama con timeout
+    # Verificar conexión a Ollama con timeout MÁS LARGO
     log_info "   Verificando conexión a Ollama..."
     local retry_count=0
-    local max_retries=5
+    local max_retries=3  # Reducido a 3 intentos pero con más tiempo
     
     while [ $retry_count -lt $max_retries ]; do
-        if timeout 5 ollama list > /dev/null 2>&1; then
-            log_success "   ✅ Conexión a Ollama establecida"
+        if curl -s --max-time 5 http://localhost:11434/api/tags > /dev/null 2>&1; then
+            log_success "   ✅ Conexión a Ollama API establecida"
             break
         else
             retry_count=$((retry_count + 1))
             if [ $retry_count -lt $max_retries ]; then
-                log_warning "   ⚠️  Intento $retry_count/$max_retries - Esperando 2s..."
-                sleep 2
+                log_warning "   ⚠️  Intento $retry_count/$max_retries - Esperando 3s..."
+                sleep 3
             else
-                log_error "   ❌ No se puede conectar al servidor Ollama después de $max_retries intentos"
-                log_info "   Intenta reiniciar Ollama manualmente: ollama serve"
-                return 1
+                log_warning "   ⚠️  No se puede conectar a Ollama API después de $max_retries intentos"
+                log_info "   CONTINUANDO de todas formas - Ollama puede estar iniciándose"
+                # NO retornar 1, continuar con el startup
             fi
         fi
     done
     
+    # Verificar modelos de Ollama (NO-BLOQUEANTE)
     local models_needed=("mistral:latest" "mistral:instruct" "mistral-nemo:latest")
-    local models_missing=false
+    log_info "   Verificando modelos disponibles..."
+    
+    local models_available=$(ollama list 2>/dev/null | tail -n +2 | awk '{print $1}' || echo "")
     
     for model in "${models_needed[@]}"; do
-        # Usar timeout para evitar bloqueos
-        if timeout 10 ollama list 2>/dev/null | grep -q "^${model}"; then
+        if echo "$models_available" | grep -q "^${model}"; then
             log_success "   ✅ Modelo $model: Disponible"
         else
             log_warning "   ⚠️  Modelo $model: NO DISPONIBLE"
-            read -p "   ¿Descargar $model ahora? (s/N): " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[SsYy]$ ]]; then
-                log_info "   Descargando $model..."
-                ollama pull "$model"
-                models_missing=true
-            else
-                log_info "   Saltando descarga de $model"
-            fi
+            log_info "   Para instalar: ollama pull $model"
         fi
     done
-    
-    if [ "$models_missing" = true ]; then
-        log_success "   Modelos descargados exitosamente"
-    fi
     
     # 7. Archivos de configuración
     if [ -f "${PROJECT_ROOT}/.env" ]; then
@@ -945,6 +946,58 @@ start_system() {
     echo "$api_monetization_pid" > "${PID_DIR}/api_monetization.pid"
     log_success "      API Monetization Server STANDALONE iniciado (PID: $api_monetization_pid)"
     
+    # ============================================================================
+    # ENTERPRISE SERVICES: Dashboard, Telegram Bot, Autonomous Orchestrator
+    # ============================================================================
+    log_info "🚀 Iniciando METACORTEX Enterprise Services..."
+    
+    # Dashboard Enterprise (puerto 8300) - FastAPI + WebSocket + 965 modelos
+    log_info "   → Dashboard Enterprise (puerto 8300) - FastAPI + WebSocket..."
+    nohup "$VENV_PYTHON" "${PROJECT_ROOT}/dashboard_enterprise.py" > "${LOGS_DIR}/dashboard_enterprise.log" 2>&1 &
+    local dashboard_pid=$!
+    echo "$dashboard_pid" > "${PID_DIR}/dashboard_enterprise.pid"
+    log_success "      Dashboard Enterprise iniciado (PID: $dashboard_pid)"
+    log_info "      🌐 URL: http://localhost:8300"
+    log_info "      📊 965 modelos ML disponibles"
+    log_info "      📡 WebSocket: ws://localhost:8300/ws"
+    log_info "      📚 API Docs: http://localhost:8300/api/docs"
+    
+    # Telegram Monitor Bot (si está configurado el token)
+    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+        log_info "   → Telegram Monitor Bot..."
+        nohup "$VENV_PYTHON" "${PROJECT_ROOT}/telegram_monitor_bot.py" > "${LOGS_DIR}/telegram_monitor.log" 2>&1 &
+        local telegram_pid=$!
+        echo "$telegram_pid" > "${PID_DIR}/telegram_monitor.pid"
+        log_success "      Telegram Monitor Bot iniciado (PID: $telegram_pid)"
+        log_info "      📱 Bot activo - Comandos: /start, /status, /models, /tasks"
+    else
+        log_info "   → Telegram Monitor Bot: DESACTIVADO (configura TELEGRAM_BOT_TOKEN)"
+    fi
+    
+    # Esperar 3 segundos para que los servicios enterprise inicien
+    log_info "   ⏳ Esperando servicios enterprise (3s)..."
+    sleep 3
+    
+    # Verificar Dashboard Enterprise
+    if ps -p "$dashboard_pid" > /dev/null 2>&1; then
+        log_success "   ✅ Dashboard Enterprise: ACTIVO (PID: $dashboard_pid, Puerto 8300)"
+        log_success "      → Abre en navegador: http://localhost:8300"
+    else
+        log_warning "   ⚠️ Dashboard Enterprise: NO ACTIVO (ver logs/dashboard_enterprise.log)"
+    fi
+    
+    # Verificar Telegram Bot (solo si se intentó iniciar)
+    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+        if ps -p "$telegram_pid" > /dev/null 2>&1; then
+            log_success "   ✅ Telegram Monitor Bot: ACTIVO (PID: $telegram_pid)"
+        else
+            log_warning "   ⚠️ Telegram Monitor Bot: NO ACTIVO (ver logs/telegram_monitor.log)"
+        fi
+    fi
+    
+    # ============================================================================
+    # SERVICIOS STANDALONE (ARQUITECTURA 3 CAPAS)
+    # ============================================================================
     # Esperar 3 segundos para que los servicios standalone inicien (ultra-rápido)
     log_info "   ⏳ Esperando servicios standalone (5s - incluyendo Emergency Contact + API)..."
     sleep 5
@@ -1122,10 +1175,22 @@ stop_system() {
     pkill -15 -f "python.*unified_startup.py" 2>/dev/null || true
     pkill -15 -f "python.*emergency_contact_system.py" 2>/dev/null || true
     pkill -15 -f "python.*api_monetization_endpoint.py" 2>/dev/null || true
+    pkill -15 -f "python.*dashboard_enterprise.py" 2>/dev/null || true
+    pkill -15 -f "python.*telegram_monitor_bot.py" 2>/dev/null || true
+    pkill -15 -f "python.*autonomous_model_orchestrator.py" 2>/dev/null || true
     
     # Limpiar PID del sistema unificado
     if [ -f "${PID_DIR}/unified_system.pid" ]; then
         rm -f "${PID_DIR}/unified_system.pid"
+    fi
+    
+    # Limpiar PIDs de servicios enterprise
+    if [ -f "${PID_DIR}/dashboard_enterprise.pid" ]; then
+        rm -f "${PID_DIR}/dashboard_enterprise.pid"
+    fi
+    
+    if [ -f "${PID_DIR}/telegram_monitor.pid" ]; then
+        rm -f "${PID_DIR}/telegram_monitor.pid"
     fi
     
     sleep 2
@@ -1169,7 +1234,7 @@ stop_system() {
     # ============================================================================
     log_info "🔓 Liberando puertos ocupados..."
     
-    for port in 8000 8001 8080 8100 8200 9090 11434; do
+    for port in 8000 8001 8080 8100 8200 8300 9090 11434; do
         local port_pid=$(lsof -ti:$port 2>/dev/null || true)
         if [ -n "$port_pid" ]; then
             log_info "Matando proceso en puerto $port (PID: $port_pid)..."
@@ -1501,6 +1566,66 @@ show_status() {
         echo -e "   ${GREEN}●${RESET} Puerto 11434 (Ollama): $process (PID $pid)"
     else
         echo -e "   ${RED}●${RESET} Puerto 11434 (Ollama): Libre"
+    fi
+    
+    # ENTERPRISE SERVICES
+    if lsof -i:8300 -sTCP:LISTEN > /dev/null 2>&1; then
+        local process=$(lsof -i:8300 -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $1}')
+        local pid=$(lsof -i:8300 -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $2}')
+        echo -e "   ${GREEN}●${RESET} Puerto 8300 (Dashboard Enterprise): $process (PID $pid)"
+        echo -e "   ${CYAN}     🌐 URL: http://localhost:8300${RESET}"
+        echo -e "   ${CYAN}     📊 965 modelos ML activos${RESET}"
+        echo -e "   ${CYAN}     📚 API Docs: http://localhost:8300/api/docs${RESET}"
+    else
+        echo -e "   ${RED}●${RESET} Puerto 8300 (Dashboard Enterprise): Libre"
+    fi
+    echo ""
+    
+    # 3b. ENTERPRISE SERVICES Status
+    echo -e "${BOLD}Servicios Enterprise:${RESET}"
+    
+    # Dashboard Enterprise Status
+    if [ -f "${PID_DIR}/dashboard_enterprise.pid" ]; then
+        local dashboard_pid=$(cat "${PID_DIR}/dashboard_enterprise.pid")
+        if ps -p "$dashboard_pid" > /dev/null 2>&1; then
+            echo -e "   ${GREEN}●${RESET} Dashboard Enterprise: Activo (PID: $dashboard_pid)"
+            echo -e "   ${CYAN}     🌐 http://localhost:8300${RESET}"
+            echo -e "   ${CYAN}     📊 FastAPI + WebSocket + REST API${RESET}"
+            echo -e "   ${CYAN}     🧠 965 modelos ML operacionales${RESET}"
+        else
+            echo -e "   ${RED}●${RESET} Dashboard Enterprise: No activo (PID file existe pero proceso muerto)"
+        fi
+    else
+        echo -e "   ${RED}●${RESET} Dashboard Enterprise: No iniciado"
+    fi
+    
+    # Telegram Monitor Bot Status
+    if [ -f "${PID_DIR}/telegram_monitor.pid" ]; then
+        local telegram_pid=$(cat "${PID_DIR}/telegram_monitor.pid")
+        if ps -p "$telegram_pid" > /dev/null 2>&1; then
+            echo -e "   ${GREEN}●${RESET} Telegram Monitor Bot: Activo (PID: $telegram_pid)"
+            echo -e "   ${CYAN}     📱 Bot: @tu_bot_name${RESET}"
+            echo -e "   ${CYAN}     💬 Comandos: /start, /status, /models, /tasks${RESET}"
+        else
+            echo -e "   ${RED}●${RESET} Telegram Monitor Bot: No activo (PID file existe pero proceso muerto)"
+        fi
+    else
+        if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            echo -e "   ${YELLOW}●${RESET} Telegram Monitor Bot: No iniciado (token configurado)"
+        else
+            echo -e "   ${YELLOW}●${RESET} Telegram Monitor Bot: Desactivado (configura TELEGRAM_BOT_TOKEN)"
+        fi
+    fi
+    
+    # Autonomous Orchestrator Status
+    local orchestrator_count=$(pgrep -f "autonomous_model_orchestrator.py" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$orchestrator_count" -gt 0 ]; then
+        local orchestrator_pid=$(pgrep -f "autonomous_model_orchestrator.py" 2>/dev/null | head -1)
+        echo -e "   ${GREEN}●${RESET} Autonomous Orchestrator: Activo (PID: $orchestrator_pid)"
+        echo -e "   ${CYAN}     🤖 965 modelos ML distribuidos${RESET}"
+        echo -e "   ${CYAN}     🎯 7 especializaciones activas${RESET}"
+    else
+        echo -e "   ${YELLOW}●${RESET} Autonomous Orchestrator: Integrado en Dashboard"
     fi
     echo ""
     

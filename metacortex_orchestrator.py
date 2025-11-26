@@ -135,3 +135,38 @@ class MetacortexUnifiedOrchestrator:
             return {"success": False, "message": "System not initialized"}
         
         return {"success": True, "message": "Task executed", "task_id": task.get("id", "unknown")}
+
+
+# ============================================================================
+# MAIN EXECUTION BLOCK
+# ============================================================================
+if __name__ == "__main__":
+    import os
+    import time
+    
+    # Crear orchestrator
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    orchestrator = MetacortexUnifiedOrchestrator(project_root=project_root)
+    
+    # Inicializar todos los subsistemas
+    orchestrator.initialize()
+    
+    # Obtener y mostrar status inicial
+    status = orchestrator.get_system_status()
+    logger.info("=" * 70)
+    logger.info("METACORTEX UNIFIED ORCHESTRATOR - ACTIVO")
+    logger.info("=" * 70)
+    logger.info(f"Status: {status}")
+    logger.info("=" * 70)
+    
+    # Mantener el proceso corriendo
+    logger.info("Orchestrator running... (Press Ctrl+C to stop)")
+    try:
+        while True:
+            time.sleep(60)
+            # Cada minuto mostrar status
+            status = orchestrator.get_system_status()
+            logger.info(f"[Heartbeat] Uptime: {status.get('uptime_seconds', 0)}s")
+    except KeyboardInterrupt:
+        logger.info("Orchestrator stopping...")
+        logger.info("✅ Orchestrator stopped gracefully")
