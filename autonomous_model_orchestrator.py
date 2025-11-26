@@ -105,6 +105,7 @@ class ModelSpecialization(Enum):
     EMERGENCY = "emergency"                # Respuesta emergencias
     OPTIMIZATION = "optimization"          # Optimización
     PREDICTION = "prediction"              # Predicción general
+    SELF_IMPROVEMENT = "self_improvement"  # 🧠 Auto-mejora del sistema
 
 
 class TaskPriority(Enum):
@@ -259,6 +260,7 @@ class AutonomousModelOrchestrator:
         self.ollama: Optional[Any] = None
         self.world_model: Optional[Any] = None
         self.cognitive_agent: Optional[Any] = None
+        self.self_improvement_system: Optional[Any] = None  # 🧠 Auto-mejora
         
         # Control de ejecución
         self.is_running = False
@@ -422,6 +424,15 @@ class AutonomousModelOrchestrator:
         except Exception as e:
             logger.warning(f"   ⚠️  World Model not available: {e}")
         
+        try:
+            # Self-Improvement System - Auto-evolución
+            from self_improvement_system import SelfImprovementSystem
+            self.self_improvement_system = SelfImprovementSystem(Path(__file__).parent)
+            logger.info("   ✅ Self-Improvement System connected (AUTO-EVOLUTION ENABLED)")
+            logger.info("      🧠 System can now see itself and self-improve")
+        except Exception as e:
+            logger.warning(f"   ⚠️  Self-Improvement System not available: {e}")
+        
         logger.info("✅ Integration setup complete (zero circular dependencies)")
     
     def _start_execution_threads(self):
@@ -527,6 +538,23 @@ class AutonomousModelOrchestrator:
         self.add_task(task)
         self.total_tasks_generated += 1
         
+        # ESTRATEGIA 3: Auto-mejora del sistema (cada 10 tareas)
+        # 🧠 El sistema se analiza y se mejora a sí mismo
+        if self.self_improvement_system and self.total_tasks_generated % 10 == 0:
+            task = Task(
+                task_id=f"auto_improve_{self.total_tasks_generated}",
+                task_type=ModelSpecialization.SELF_IMPROVEMENT,
+                priority=TaskPriority.MEDIUM,
+                description="Self-improvement: Analyze and improve own code",
+                input_data={"action": "self_analyze_and_improve"},
+                required_features=["code_analysis"],
+                generated_from="auto_generator_self_improvement"
+            )
+            
+            self.add_task(task)
+            self.total_tasks_generated += 1
+            logger.info("   🧠 Generated SELF-IMPROVEMENT task")
+        
         logger.info(f"   Generated 2 new tasks (total: {self.total_tasks_generated})")
     
     def _generate_synthetic_data(self) -> Dict[str, Any]:
@@ -584,15 +612,19 @@ class AutonomousModelOrchestrator:
     def _run_task_with_models(self, task: Task):
         """Ejecuta la tarea con los modelos asignados."""
         try:
-            # Caso 1: Tarea requiere internet
-            if task.requires_internet and self.internet_search:
+            # Caso 1: Tarea de auto-mejora 🧠
+            if task.task_type == ModelSpecialization.SELF_IMPROVEMENT and self.self_improvement_system:
+                results = self._execute_self_improvement_task(task)
+            
+            # Caso 2: Tarea requiere internet
+            elif task.requires_internet and self.internet_search:
                 results = self._execute_internet_task(task)
             
-            # Caso 2: Tarea requiere Ollama
+            # Caso 3: Tarea requiere Ollama
             elif task.requires_ollama and self.ollama:
                 results = self._execute_ollama_task(task)
             
-            # Caso 3: Tarea de ML estándar
+            # Caso 4: Tarea de ML estándar
             else:
                 results = self._execute_ml_task(task)
             
@@ -676,6 +708,54 @@ class AutonomousModelOrchestrator:
             "model": result.get("model", ""),
             "source": "ollama"
         }
+    
+    def _execute_self_improvement_task(self, task: Task) -> Dict[str, Any]:
+        """
+        Ejecuta tarea de AUTO-MEJORA del sistema.
+        🧠 El sistema se analiza y se mejora a sí mismo.
+        """
+        logger.info("🧠 Executing SELF-IMPROVEMENT task")
+        
+        action = task.input_data.get("action", "self_analyze_and_improve")
+        
+        if action == "self_analyze_and_improve":
+            # 1. Analizar propio código
+            logger.info("   🔍 Analyzing self...")
+            analyses = self.self_improvement_system.analyze_self()
+            
+            # 2. Generar mejoras
+            logger.info("   💡 Generating improvements...")
+            improvements = self.self_improvement_system.generate_improvements(analyses)
+            
+            # 3. Aplicar mejoras de alta prioridad (solo 1 por ciclo para seguridad)
+            high_priority = [i for i in improvements if i.priority.value >= 4]
+            applied_count = 0
+            
+            if high_priority:
+                improvement = high_priority[0]
+                logger.info(f"   🔧 Applying improvement: {improvement.description}")
+                
+                success = self.self_improvement_system.apply_improvement(improvement)
+                if success:
+                    applied_count = 1
+                    logger.info("   ✅ Self-improvement applied successfully!")
+            
+            return {
+                "action": action,
+                "files_analyzed": len(analyses),
+                "improvements_suggested": len(improvements),
+                "high_priority_improvements": len(high_priority),
+                "improvements_applied": applied_count,
+                "status": "self_improved" if applied_count > 0 else "analysis_complete",
+                "source": "self_improvement_system"
+            }
+        
+        else:
+            return {
+                "action": action,
+                "status": "unknown_action",
+                "source": "self_improvement_system"
+            }
     
     def _execute_ml_task(self, task: Task) -> Dict[str, Any]:
         """Ejecuta tarea de ML estándar con modelos entrenados."""
