@@ -312,6 +312,29 @@ def _create_autonomous_orchestrator(models_dir: Path = None, max_parallel_tasks:
 # 📝 REGISTRO DE FACTORIES
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _create_consciousness():
+    """Factory para Metacortex Consciousness (Auto-Mejora con Consciencia)."""
+    try:
+        from metacortex_consciousness import get_consciousness
+        from pathlib import Path
+        
+        project_root = Path(__file__).parent
+        consciousness = get_consciousness(project_root)
+        consciousness.initialize()
+        
+        logger.info("🧠 Metacortex Consciousness creado y inicializado")
+        logger.info("   ✅ Capacidad de introspección: ACTIVA")
+        logger.info("   ✅ Auto-reprogramación: ACTIVA")
+        logger.info("   ✅ Sandbox de pruebas: ACTIVO")
+        logger.info("   ✅ MANOS Y PIES: ACTIVOS")
+        
+        return consciousness
+        
+    except ImportError as e:
+        logger.warning(f"metacortex_consciousness no disponible: {e}")
+        return None
+
+
 def register_all_factories():
     """Registra todas las factories en el registry."""
     registry.register_factory("ml_pipeline", _create_ml_pipeline)
@@ -322,8 +345,9 @@ def register_all_factories():
     registry.register_factory("memory_system", _create_memory_system)
     registry.register_factory("telegram_bot", _create_telegram_bot)
     registry.register_factory("autonomous_orchestrator", _create_autonomous_orchestrator)
+    registry.register_factory("consciousness", _create_consciousness)  # 🧠 NUEVO: Consciencia
     
-    logger.info("✅ Todas las factories registradas")
+    logger.info("✅ Todas las factories registradas (incluye Consciousness)")
 
 
 # Auto-register al importar
@@ -372,6 +396,11 @@ def get_telegram_bot():
 def get_autonomous_orchestrator(**kwargs):
     """Obtiene el singleton de Autonomous Orchestrator."""
     return registry.get("autonomous_orchestrator", **kwargs)
+
+
+def get_consciousness():
+    """Obtiene el singleton de Metacortex Consciousness."""
+    return registry.get("consciousness")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
