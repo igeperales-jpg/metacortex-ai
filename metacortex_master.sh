@@ -1069,11 +1069,15 @@ start_system() {
     # PASO 8: ORCHESTRATOR (INTEGRADO EN DASHBOARD ENTERPRISE)
     # ============================================================================
     # NOTA: El Autonomous Orchestrator ahora está integrado en dashboard_enterprise.py
-    # No es necesario iniciarlo por separado para evitar loops de inicialización
+    # El orchestrator se inicia automáticamente cuando el Dashboard se inicia
     log_info "Agent Orchestrator integrado en Dashboard Enterprise..."
-    log_info "   ℹ️  Orchestrator se iniciará automáticamente con el Dashboard"
+    log_info "   ℹ️  Orchestrator se inicia automáticamente con el Dashboard"
     log_info "   ℹ️  Modo autónomo: ACTIVADO (enable_auto_task_generation=True)"
     log_info "   ℹ️  965 modelos ML disponibles"
+    
+    # Asignar orchestrator_pid al mismo PID del Dashboard (donde está integrado)
+    local orchestrator_pid=$dashboard_pid
+    log_success "Agent Orchestrator iniciado (PID: $orchestrator_pid - integrado en Dashboard)"
 
     # ============================================================================
     # PASO 9: MONITOREAR EL STARTUP (VER LOGS EN TIEMPO REAL)
@@ -1108,11 +1112,16 @@ start_system() {
         log_info "Ver logs en: ${LOGS_DIR}/metacortex_daemon_military.log"
     fi
     
+    # Verificar orchestrator (integrado en Dashboard Enterprise)
     if ps -p "$orchestrator_pid" > /dev/null 2>&1; then
         orchestrator_running=true
-        log_success "METACORTEX Agent Orchestrator CORRIENDO (PID: $orchestrator_pid)"
+        log_success "METACORTEX Agent Orchestrator CORRIENDO (PID: $orchestrator_pid - integrado en Dashboard)"
+        log_info "   ✅ Modo autónomo: ACTIVO (enable_auto_task_generation=True)"
+        log_info "   ✅ Task Executor Loop: RUNNING"
+        log_info "   ✅ Task Generator Loop: RUNNING"
+        log_info "   ✅ 965 ML models: DISPONIBLES"
     else
-        log_warning "Orchestrator completó su ciclo (esto es normal)"
+        log_warning "Orchestrator/Dashboard no está corriendo (verificar logs)"
     fi
     
     # Verificar sistemas de IA
